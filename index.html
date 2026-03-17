@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>My Stylist</title>
+
+<!-- PWA / Home Screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Stylist">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1a2e">
+
+<!-- App icon (scissors on dark bg — generated as inline SVG→PNG via canvas) -->
+<link rel="apple-touch-icon" id="appIcon">
+<script>
+// Generate app icon as canvas and set as apple-touch-icon
+(function(){
+  const c = document.createElement('canvas');
+  c.width = 180; c.height = 180;
+  const ctx = c.getContext('2d');
+  // Background
+  const g = ctx.createLinearGradient(0,0,180,180);
+  g.addColorStop(0,'#1a1a2e'); g.addColorStop(1,'#2d2d4e');
+  ctx.fillStyle = g;
+  ctx.roundRect(0,0,180,180,36);
+  ctx.fill();
+  // Scissors emoji
+  ctx.font = '90px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✂️', 90, 95);
+  document.getElementById('appIcon').href = c.toDataURL('image/png');
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f7f8fa; --surface: #ffffff; --border: #e8eaed; --border-strong: #d1d5db;
+  --text: #111827; --text-2: #6b7280; --text-3: #9ca3af;
+  --brand: #1a1a2e; --brand-soft: #f0f0f5;
+  --accent: #4f46e5; --accent-soft: #eef2ff;
+  --green: #059669; --green-soft: #d1fae5;
+  --red: #dc2626; --red-soft: #fee2e2;
+  --amber: #d97706; --amber-soft: #fef3c7;
+  --radius: 12px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.1);
+}
+body { font-family:'Figtree',system-ui,sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.5; min-height:100vh; min-height:100dvh; }
+
+/* iPhone safe areas */
+.sidebar { padding-top: max(32px, env(safe-area-inset-top)); }
+.mobile-nav { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+.main { padding-top: env(safe-area-inset-top); }
+
+/* LAYOUT */
+.layout { display:flex; min-height:100vh; }
+
+/* SIDEBAR */
+.sidebar { width:240px; min-width:240px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+.sidebar-brand { padding:20px 20px 16px; border-bottom:1px solid var(--border); }
+.logo-row { display:flex; align-items:center; gap:10px; }
+.logo-icon { width:34px; height:34px; border-radius:10px; background:var(--brand); display:flex; align-items:center; justify-content:center; font-size:16px; color:#fff; flex-shrink:0; }
+.logo-text { font-size:15px; font-weight:700; color:var(--text); letter-spacing:-.02em; }
+.logo-sub  { font-size:11px; color:var(--text-3); }
+.sidebar-nav { padding:12px 10px; flex:1; }
+.nav-section-label { font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; padding:10px 10px 4px; }
+.nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text-2); font-size:13.5px; font-weight:500; transition:background .15s,color .15s; margin-bottom:2px; }
+.nav-item:hover { background:var(--bg); color:var(--text); }
+.nav-item.active { background:var(--brand-soft); color:var(--brand); font-weight:600; }
+.nav-item svg { width:17px; height:17px; flex-shrink:0; stroke-width:2; }
+.nav-bottom { padding:10px 10px 20px; border-top:1px solid var(--border); margin-top:auto; }
+
+/* MAIN */
+.main { flex:1; overflow-y:auto; }
+.page { display:none; padding:32px 36px; max-width:1100px; animation:fadeIn .2s ease; }
+.page.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+
+/* PAGE HEADER */
+.page-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; gap:16px; flex-wrap:wrap; }
+.page-title { font-size:22px; font-weight:700; letter-spacing:-.02em; }
+.page-sub   { font-size:13px; color:var(--text-3); margin-top:2px; }
+.page-header-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+
+/* MONTH NAV */
+.month-nav { display:flex; align-items:center; gap:2px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:3px; }
+.month-btn { background:none; border:none; cursor:pointer; width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--text-2); transition:background .15s; }
+.month-btn:hover { background:var(--bg); }
+.month-label { font-size:13px; font-weight:600; padding:0 8px; min-width:130px; text-align:center; }
+
+/* BUTTONS */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:var(--radius-sm); border:none; cursor:pointer; font-family:'Figtree',sans-serif; font-size:13.5px; font-weight:600; transition:all .15s; white-space:nowrap; }
+.btn-primary { background:var(--brand); color:#fff; }
+.btn-primary:hover { background:#2d2d4e; }
+.btn-outline { background:var(--surface); color:var(--text); border:1.5px solid var(--border); }
+.btn-outline:hover { border-color:var(--border-strong); background:var(--bg); }
+.btn-ghost { background:transparent; color:var(--text-2); }
+.btn-ghost:hover { background:var(--bg); color:var(--text); }
+.btn-danger { background:transparent; color:var(--red); border:1px solid #fca5a5; font-size:12px; padding:5px 10px; font-weight:600; }
+.btn-danger:hover { background:var(--red-soft); }
+.btn-accent { background:var(--accent); color:#fff; }
+.btn-accent:hover { filter:brightness(1.1); }
+.btn-sm { padding:6px 14px; font-size:12.5px; }
+
+/* STAT CARDS */
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:28px; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); }
+.stat-label { font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.stat-value { font-size:28px; font-weight:700; letter-spacing:-.03em; line-height:1; }
+.stat-value sup { font-size:14px; font-weight:600; color:var(--text-2); vertical-align:super; margin-right:1px; }
+.stat-delta { font-size:12px; margin-top:6px; font-weight:500; color:var(--text-3); }
+.d-up   { color:var(--green); }
+.d-down { color:var(--red); }
+
+/* CARD */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; margin-bottom:20px; }
+.card-header { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--border); }
+.card-title { font-size:14px; font-weight:700; }
+.card-body { padding:0; }
+
+/* TABLE */
+.tbl { width:100%; border-collapse:collapse; }
+.tbl thead th { text-align:left; padding:10px 16px; font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.06em; background:var(--bg); border-bottom:1px solid var(--border); }
+.tbl tbody td { padding:12px 16px; border-bottom:1px solid var(--border); font-size:13.5px; }
+.tbl tbody tr:last-child td { border-bottom:none; }
+.tbl tbody tr:hover td { background:#fafbfc; }
+.tbl-empty td { text-align:center; color:var(--text-3); padding:40px; font-size:13px; }
+
+/* BADGE */
+.badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap; }
+.badge-Cut       { background:#dbeafe; color:#1d4ed8; }
+.badge-Colour    { background:#fae8ff; color:#9333ea; }
+.badge-Treatment { background:#fef3c7; color:#b45309; }
+.badge-Perm      { background:#fce7f3; color:#db2777; }
+.badge-Styling   { background:#d1fae5; color:#065f46; }
+.badge-Add-on    { background:#f0fdf4; color:#15803d; }
+.badge-Other     { background:var(--bg); color:var(--text-2); }
+
+/* FORM */
+.form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-label { font-size:12px; font-weight:700; color:var(--text-2); }
+.form-input, .form-select, .form-textarea { border:1.5px solid var(--border); border-radius:var(--radius-sm); padding:9px 12px; font-family:'Figtree',sans-serif; font-size:13.5px; color:var(--text); background:var(--surface); transition:border-color .15s,box-shadow .15s; outline:none; width:100%; }
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+.form-textarea { resize:vertical; min-height:72px; }
+
+/* SERVICE PICKER */
+.svc-picker-container { border:1.5px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; max-height:280px; overflow-y:auto; }
+.svc-cat-hd { padding:8px 14px 4px; font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.08em; background:var(--bg); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; }
+.svc-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border); transition:background .1s; gap:8px; }
+.svc-row:last-child { border-bottom:none; }
+.svc-row:hover { background:var(--accent-soft); }
+.svc-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:600; background:var(--accent-soft); color:var(--accent); border:1.5px solid #c7d2fe; }
+.svc-chip-remove { cursor:pointer; font-size:14px; line-height:1; opacity:.6; transition:opacity .15s; }
+.svc-chip-remove:hover { opacity:1; }
+.svc-row.selected { background:var(--accent-soft); }
+.svc-row.selected .svc-row-name::after { content:' ✓'; color:var(--accent); font-weight:700; }
+.svc-row-meta { font-size:11.5px; color:var(--text-3); margin-top:1px; }
+.svc-row-price { font-size:13px; font-weight:700; white-space:nowrap; }
+.svc-chosen { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:var(--radius-sm); cursor:pointer; margin-bottom:6px; }
+.svc-chosen-name { font-size:13.5px; font-weight:600; color:var(--accent); }
+.svc-chosen-change { font-size:12px; color:var(--accent); opacity:.7; }
+
+/* CHART */
+.bar-list { display:flex; flex-direction:column; gap:10px; }
+.bar-row  { display:flex; align-items:center; gap:10px; }
+.bar-label { font-size:12.5px; font-weight:500; color:var(--text-2); width:100px; text-align:right; flex-shrink:0; }
+.bar-track { flex:1; height:24px; background:var(--bg); border-radius:6px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,var(--accent),#818cf8); transition:width .7s cubic-bezier(.4,0,.2,1); display:flex; align-items:center; justify-content:flex-end; padding-right:8px; font-size:11.5px; font-weight:700; color:#fff; min-width:4px; }
+.bar-val  { font-size:12px; font-weight:600; width:56px; flex-shrink:0; }
+
+/* CLIENT CARDS */
+.client-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
+.client-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; cursor:pointer; box-shadow:var(--shadow); transition:all .2s; }
+.client-card:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); border-color:var(--accent); }
+.client-avatar { width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; margin-bottom:12px; }
+.client-name { font-size:15px; font-weight:700; margin-bottom:8px; }
+.client-meta-row { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2); margin-bottom:3px; }
+.dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+/* AI */
+.ai-panel { background:var(--brand); border-radius:var(--radius); padding:24px 28px; color:#fff; margin-bottom:20px; }
+.ai-panel-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+.ai-panel-sub   { font-size:12.5px; color:rgba(255,255,255,.45); margin-bottom:20px; }
+.ai-result { font-size:14px; line-height:1.9; color:rgba(255,255,255,.85); white-space:pre-wrap; }
+.ai-result.loading { color:rgba(255,255,255,.35); animation:pulse 1.4s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* MODAL */
+.overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; align-items:center; justify-content:center; backdrop-filter:blur(3px); }
+.overlay.open { display:flex; }
+.modal-box { background:var(--surface); border-radius:16px; width:90%; max-width:560px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-md); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px; border-bottom:1px solid var(--border); }
+.modal-title { font-size:17px; font-weight:700; }
+.modal-body { padding:24px; }
+.modal-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+.close-btn { width:30px; height:30px; border-radius:50%; border:none; background:var(--bg); cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-2); font-size:14px; transition:background .15s; }
+.close-btn:hover { background:var(--border); }
+
+/* TABS */
+.tabs { display:flex; border-bottom:1px solid var(--border); margin-bottom:24px; }
+.tab-btn { padding:10px 20px; border:none; background:none; cursor:pointer; font-family:'Figtree',sans-serif; font-size:13.5px; font-weight:600; color:var(--text-3); border-bottom:2px solid transparent; margin-bottom:-1px; transition:color .15s,border-color .15s; }
+.tab-btn:hover { color:var(--text); }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* TOAST */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--text); color:#fff; padding:10px 22px; border-radius:30px; font-size:13px; font-weight:600; z-index:300; transition:transform .3s cubic-bezier(.34,1.56,.64,1); pointer-events:none; }
+.toast.show { transform:translateX(-50%) translateY(0); }
+
+/* MOBILE */
+.mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); z-index:100; padding:6px 0 18px; justify-content:space-around; }
+.mnav-item { display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--text-3); font-size:10px; font-weight:700; padding:4px 8px; }
+.mnav-item.active { color:var(--accent); }
+.mnav-item svg { width:22px; height:22px; stroke-width:2; }
+
+@media (max-width:720px) {
+  .sidebar { display:none; }
+  .mobile-nav { display:flex; }
+  .page { padding:20px 16px 80px; }
+  .stat-grid { grid-template-columns:1fr 1fr; }
+  .two-col { grid-template-columns:1fr !important; }
+  .form-grid { grid-template-columns:1fr 1fr; }
+}
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+.mb-0 { margin-bottom:0 !important; }
+.mono { font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo-row">
+      <div class="logo-icon">✂</div>
+      <div>
+        <div class="logo-text">My Stylist</div>
+        <div class="logo-sub">Personal Dashboard</div>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Overview</div>
+    <div class="nav-item active" onclick="nav('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard
+    </div>
+    <div class="nav-item" onclick="nav('add')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add Appointment
+    </div>
+    <div class="nav-section-label">Records</div>
+    <div class="nav-item" onclick="nav('records')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>History
+    </div>
+    <div class="nav-item" onclick="nav('customers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Clients
+    </div>
+    <div class="nav-section-label">Insights</div>
+    <div class="nav-item" onclick="nav('analytics')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Analytics & AI
+    </div>
+  </nav>
+  <div class="nav-bottom">
+    <div class="nav-item" onclick="nav('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>Settings
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-sub" id="todayLabel"></div></div>
+      <div class="page-header-right">
+        <div class="month-nav">
+          <button class="month-btn" onclick="changeMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="month-label" id="monthLabel"></span>
+          <button class="month-btn" onclick="changeMonth(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="nav('add')">+ New</button>
+      </div>
+    </div>
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Today's Appointments</span>
+        <span style="font-size:12.5px;color:var(--text-3)" id="todayCount"></span>
+      </div>
+      <table class="tbl"><thead><tr><th>Client</th><th>Service</th><th>Amount</th><th>Tip</th><th>Time</th><th></th></tr></thead>
+      <tbody id="todayTable"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ADD -->
+  <div class="page" id="page-add">
+    <div class="page-header">
+      <div><div class="page-title">Add Appointment</div><div class="page-sub">Record a new service</div></div>
+    </div>
+    <div class="card" style="max-width:680px">
+      <div class="card-header"><span class="card-title">Appointment Details</span></div>
+      <div class="card-body" style="padding:24px">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
+          <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="fDate"></div>
+          <div class="form-group"><label class="form-label">Client Name</label><input class="form-input" type="text" id="fClient" placeholder="e.g. Sarah K." list="clientList" autocomplete="off"><datalist id="clientList"></datalist></div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label">Services <span id="svcCountBadge" style="background:var(--accent);color:white;border-radius:20px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px;display:none"></span></label>
+          <!-- Selected services chips -->
+          <div id="svcChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:0"></div>
+          <!-- Search + picker -->
+          <input class="form-input" style="margin-bottom:8px" type="text" id="svcSearch" placeholder="🔍  Search and add services..." oninput="filterSvc(this.value)">
+          <div class="svc-picker-container" id="svcPicker"></div>
+          <!-- Auto-total note -->
+          <div id="svcAutoTotal" style="display:none;font-size:12px;color:var(--accent);margin-top:6px;font-weight:600"></div>
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:16px">
+          <div class="form-group"><label class="form-label">Amount (CAD $)</label><input class="form-input mono" type="number" id="fAmount" placeholder="0.00" min="0" step="0.01" oninput="calcTip()"></div>
+          <div class="form-group"><label class="form-label">Tip (CAD $)</label><input class="form-input mono" type="number" id="fTip" placeholder="0.00" min="0" step="0.01"></div>
+          <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="fDuration" placeholder="60"></div>
+        </div>
+
+        <!-- DISCOUNT -->
+        <div style="background:#f0fdf4;border:1.5px solid #6ee7b7;border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏷️ Discount</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+              <input type="checkbox" id="discStudent" onchange="applyDiscount()" style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;margin-top:1px;flex-shrink:0">
+              <div>
+                <div style="font-size:13.5px;font-weight:600;color:var(--text)">Student Discount — 10% off</div>
+                <div style="font-size:11.5px;color:var(--text-3)">Mon &amp; Wed only · Clipper &amp; Scissor Cut / Classic Hair Cut</div>
+              </div>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+              <input type="checkbox" id="discResidence" onchange="applyDiscount()" style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;margin-top:1px;flex-shrink:0">
+              <div>
+                <div style="font-size:13.5px;font-weight:600;color:var(--text)">Residence Discount — 20% off</div>
+                <div style="font-size:11.5px;color:var(--text-3)">Services $50+ (excl. Bang Trim / Barber / Child / Teenager)</div>
+              </div>
+            </label>
+          </div>
+          <div id="discResult" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #a7f3d0;font-size:13px;color:var(--green);font-weight:600"></div>
+        </div>
+
+        <!-- TIP CALCULATOR -->
+        <div style="background:var(--accent-soft);border:1.5px solid #c7d2fe;border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+            <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">💡 Tip Calculator</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2)">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600">
+                <input type="checkbox" id="gcIncluded" checked onchange="calcTip()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+                GC fee ($3.00)
+              </label>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:130px">
+              <label class="form-label" style="color:var(--accent)">Fresha Total Sale (incl. tax &amp; tip)</label>
+              <input class="form-input mono" type="number" id="fTotalSale" placeholder="0.00" min="0" step="0.01"
+                style="border-color:#c7d2fe;background:white"
+                oninput="calcTip()">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:110px">
+              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Breakdown</div>
+              <div id="tipBreakdown" style="font-size:12px;color:var(--text-2);line-height:1.8"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Tip</div>
+              <div id="tipResult" style="font-size:26px;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1">—</div>
+              <button class="btn btn-accent btn-sm" id="tipApplyBtn" onclick="applyTip()" style="display:none;padding:5px 12px;font-size:12px"></button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:20px"><label class="form-label">Notes</label><textarea class="form-textarea" id="fNote" placeholder="Colour formula, preferences, anything to remember..."></textarea></div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-primary" onclick="saveRecord()">Save Appointment</button>
+          <button class="btn btn-ghost" onclick="clearForm()">Clear</button>
+          <span id="saveMsg" style="display:none;color:var(--green);font-size:13px;font-weight:700">✓ Saved!</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="page" id="page-records">
+    <div class="page-header">
+      <div><div class="page-title">History</div><div class="page-sub" id="recordsSub"></div></div>
+      <div class="page-header-right">
+        <div class="month-nav">
+          <button class="month-btn" onclick="changeMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="month-label" id="monthLabel2"></span>
+          <button class="month-btn" onclick="changeMonth(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div id="recordsList"></div>
+  </div>
+
+  <!-- CLIENTS -->
+  <div class="page" id="page-customers">
+    <div class="page-header">
+      <div><div class="page-title">Clients</div><div class="page-sub" id="clientsSub"></div></div>
+    </div>
+    <div class="client-grid" id="customerGrid"></div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="page" id="page-analytics">
+    <div class="page-header">
+      <div><div class="page-title">Analytics & AI</div><div class="page-sub">Performance insights</div></div>
+      <div class="page-header-right">
+        <div class="month-nav">
+          <button class="month-btn" onclick="changeMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <span class="month-label" id="monthLabel3"></span>
+          <button class="month-btn" onclick="changeMonth(1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'tab-stats')">📊 Statistics</button>
+      <button class="tab-btn" onclick="switchTab(this,'tab-ai')">✨ AI Analysis</button>
+    </div>
+    <div id="tab-stats">
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><span class="card-title">💰 Commission Summary</span><span style="font-size:12px;color:var(--text-3)">49.5% · excl. GC fees</span></div>
+        <div class="card-body" style="padding:16px"><div id="commSummary"></div></div>
+      </div>
+      <div class="two-col">
+        <div class="card mb-0"><div class="card-header"><span class="card-title">Revenue by Category</span></div><div class="card-body" style="padding:20px"><div class="bar-list" id="serviceChart"></div></div></div>
+        <div class="card mb-0"><div class="card-header"><span class="card-title">Clients by Weekday</span></div><div class="card-body" style="padding:20px"><div class="bar-list" id="weekdayChart"></div></div></div>
+      </div>
+      <div class="card"><div class="card-header"><span class="card-title">Monthly Revenue & Commission — last 6 months</span></div><div class="card-body" style="padding:20px"><div class="bar-list" id="monthChart"></div><div id="monthChartLegend"></div></div></div>
+    </div>
+    <div id="tab-ai" style="display:none">
+      <div class="ai-panel">
+        <div class="ai-panel-title">✦ AI Performance Analysis</div>
+        <div class="ai-panel-sub">今月のデータをもとに、AIが日本語で業績分析とアドバイスを提供します</div>
+        <div class="ai-result" id="aiResult">「Analyze」ボタンを押して分析を開始してください。</div>
+        <button class="btn btn-accent" style="margin-top:20px" onclick="runAI()">✨ Analyze this month</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="page-header">
+      <div><div class="page-title">Settings</div><div class="page-sub">Manage your service menu and data</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Service Menu</span></div>
+      <div class="card-body" style="padding:20px">
+        <div id="serviceListUI"></div>
+        <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">Add New Service</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="flex:2;min-width:140px"><label class="form-label">Service Name</label><input class="form-input" type="text" id="newServiceName" placeholder="e.g. Keratin Smoothing"></div>
+            <div class="form-group" style="width:90px"><label class="form-label">Price ($)</label><input class="form-input mono" type="number" id="newServicePrice" placeholder="80"></div>
+            <div class="form-group" style="width:90px"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="newServiceDuration" placeholder="60" min="0"></div>
+            <div class="form-group" style="width:110px"><label class="form-label">Category</label><select class="form-select" id="newServiceCat"><option>Cut</option><option>Colour</option><option>Treatment</option><option>Perm</option><option>Styling</option><option>Add-on</option><option>Other</option></select></div>
+            <button class="btn btn-primary btn-sm" onclick="addService()">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Data Management</span></div>
+      <div class="card-body" style="padding:20px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="exportData()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export JSON</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('importFile').click()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Import JSON</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+        <button class="btn btn-danger btn-sm" onclick="if(confirm('Delete all appointment records? Services will be kept.'))clearAllData()">Delete All Records</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- MOBILE NAV -->
+<div class="mobile-nav">
+  <div class="mnav-item active" onclick="nav('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Home</div>
+  <div class="mnav-item" onclick="nav('add')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</div>
+  <div class="mnav-item" onclick="nav('records')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/></svg>History</div>
+  <div class="mnav-item" onclick="nav('customers')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clients</div>
+  <div class="mnav-item" onclick="nav('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Stats</div>
+</div>
+
+<!-- CLIENT MODAL -->
+<div class="overlay" id="clientModal">
+  <div class="modal-box">
+    <div class="modal-header"><div class="modal-title" id="modalTitle"></div><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer"><button class="btn btn-outline btn-sm" onclick="closeModal()">Close</button></div>
+  </div>
+</div>
+
+<!-- EDIT RECORD MODAL -->
+<div class="overlay" id="editModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">Edit Appointment</div>
+      <button class="close-btn" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+        <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="eFDate"></div>
+        <div class="form-group"><label class="form-label">Client Name</label><input class="form-input" type="text" id="eFClient"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Service</label>
+        <input class="form-input" type="text" id="eFService" placeholder="e.g. Classic Hair Cut + Glossing">
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px">複数の場合は「+」で区切って入力（例: Classic Hair Cut + Tint）</div>
+      </div>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px">
+        <div class="form-group"><label class="form-label">Amount ($)</label><input class="form-input mono" type="number" id="eFAmount" min="0" step="0.01"></div>
+        <div class="form-group"><label class="form-label">Tip ($)</label><input class="form-input mono" type="number" id="eFTip" min="0" step="0.01"></div>
+        <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="eFDuration" min="0"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-textarea" id="eFNote" style="min-height:60px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger btn-sm" onclick="deleteFromEdit()">Delete</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-sm" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══ STATE ══
+let DB = {
+  records: [],
+  services: [
+    {name:'Clipper & Scissor Cut',defaultPrice:58,category:'Cut',duration:60},
+    {name:'Classic Hair Cut - Short to Long',defaultPrice:78,category:'Cut',duration:60},
+    {name:'Pixie & Crop Hair Cut',defaultPrice:74,category:'Cut',duration:60},
+    {name:'Teenager Scissor Cut (Medium/Long)',defaultPrice:64,category:'Cut',duration:60},
+    {name:'Teenager Clipper & Scissor Cut (Short)',defaultPrice:48,category:'Cut',duration:45},
+    {name:'CC Child Haircut',defaultPrice:42,category:'Cut',duration:45},
+    {name:'Bang / Fringe Trim',defaultPrice:13,category:'Cut',duration:15},
+    {name:'Barber Cut',defaultPrice:42,category:'Cut',duration:45},
+    {name:'Tint - New Growth',defaultPrice:95,category:'Colour',duration:90},
+    {name:'Tint - All-Over Hair Colour',defaultPrice:135,category:'Colour',duration:105},
+    {name:'Tint - Buzz Hair Colour',defaultPrice:70,category:'Colour',duration:75},
+    {name:'Baby Lights / Micro-foils - Partial',defaultPrice:250,category:'Colour',duration:180},
+    {name:'Baby Lights / Micro-foils - Full Head',defaultPrice:350,category:'Colour',duration:240},
+    {name:'Highlights - Partial (New Growth)',defaultPrice:150,category:'Colour',duration:135},
+    {name:'Highlights - Full Head (New Growth)',defaultPrice:195,category:'Colour',duration:165},
+    {name:'Jazz - Colour (New Growth) Between Highlights',defaultPrice:140,category:'Colour',duration:120},
+    {name:'Balayage / Ombre - Smooth Shade Shift',defaultPrice:240,category:'Colour',duration:210},
+    {name:'Blonding (Bleach out) - New Growth',defaultPrice:130,category:'Colour',duration:150},
+    {name:'Glossing / Toning',defaultPrice:95,category:'Colour',duration:90},
+    {name:'Colour Correction',defaultPrice:230,category:'Colour',duration:180},
+    {name:'Smoothing Treatment (Keratin)',defaultPrice:220,category:'Treatment',duration:150},
+    {name:'Botanical Repair Treatment',defaultPrice:85,category:'Treatment',duration:75},
+    {name:'PCC - Protection Cheveux Complexe',defaultPrice:85,category:'Treatment',duration:60},
+    {name:'Oil Therapy Hair Treatment',defaultPrice:85,category:'Treatment',duration:60},
+    {name:'Deep Cleansing Scalp Treatment',defaultPrice:80,category:'Treatment',duration:60},
+    {name:'Anti Chute - Anti-Age',defaultPrice:85,category:'Treatment',duration:60},
+    {name:'Perm - Regular',defaultPrice:130,category:'Perm',duration:105},
+    {name:'Mens Perm',defaultPrice:120,category:'Perm',duration:90},
+    {name:'Straightening - Short',defaultPrice:280,category:'Perm',duration:180},
+    {name:'Straightening - Medium',defaultPrice:310,category:'Perm',duration:180},
+    {name:'Straightening - Long',defaultPrice:340,category:'Perm',duration:210},
+    {name:'Digital Perm - Short',defaultPrice:280,category:'Perm',duration:210},
+    {name:'Digital Perm - Medium',defaultPrice:310,category:'Perm',duration:210},
+    {name:'Digital Perm - Long',defaultPrice:340,category:'Perm',duration:210},
+    {name:'BD Shampoo & Blow Dry (Short)',defaultPrice:45,category:'Styling',duration:45},
+    {name:'BD Shampoo & Blow Dry (Medium)',defaultPrice:50,category:'Styling',duration:60},
+    {name:'BD Shampoo & Blow Dry (Long)',defaultPrice:55,category:'Styling',duration:60},
+    {name:'Add on - Basic Blow Dry',defaultPrice:30,category:'Add-on',duration:15},
+    {name:'Add on - Styling (Flat/Curling Iron)',defaultPrice:20,category:'Add-on',duration:15},
+    {name:'Add on - Glossing / Toning with Color',defaultPrice:70,category:'Add-on',duration:45},
+    {name:'Add on - Energy Shot (Detangling)',defaultPrice:15,category:'Add-on',duration:15},
+    {name:'Add on - Color with Service',defaultPrice:50,category:'Add-on',duration:15},
+    {name:'Add on - PCC Protection Cheveux',defaultPrice:45,category:'Add-on',duration:30},
+    {name:'Add on - Botanical Repair Treatment',defaultPrice:45,category:'Add-on',duration:30},
+    {name:'Add on - Oil Therapy Hair Treatment',defaultPrice:45,category:'Add-on',duration:30},
+    {name:'Add on - Exfoliating Scalp Treatment',defaultPrice:18,category:'Add-on',duration:15},
+    {name:'Add on - Deep Cleansing Scalp Treatment',defaultPrice:42,category:'Add-on',duration:30},
+    {name:'Add on - Anti Chute / Anti-Age',defaultPrice:45,category:'Add-on',duration:30},
+    {name:'Add on - Extra Unit ($5)',defaultPrice:5,category:'Add-on',duration:5},
+    {name:'Add on - Extra Unit ($10)',defaultPrice:10,category:'Add-on',duration:10},
+    {name:'Add on - Extra Unit ($20)',defaultPrice:20,category:'Add-on',duration:15},
+    {name:'Add on - Beard Trim',defaultPrice:15,category:'Add-on',duration:15},
+    {name:'GC Green Circle Eco-friendly',defaultPrice:3,category:'Other',duration:5},
+  ]
+};
+let currentMonth = new Date().getMonth();
+let currentYear  = new Date().getFullYear();
+let selectedSvcs = []; // multi-select array
+
+// ══ PERSIST ══
+function save(){ localStorage.setItem('stylistDB', JSON.stringify(DB)); }
+function load(){
+  try {
+    const d = localStorage.getItem('stylistDB');
+    if(d){
+      const p = JSON.parse(d);
+      if(p.records) DB.records = p.records;
+      // Only replace services if they have category (new format)
+      if(p.services && p.services.length && p.services[0].category !== undefined) DB.services = p.services;
+    }
+  } catch(e){}
+}
+
+// ══ UTILS ══
+function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2200); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function fmt(n){ return Number(n).toFixed(2); }
+function fmtDate(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}); }
+function initials(n){ return n.trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'?'; }
+function svcCat(name){ return (DB.services.find(s=>s.name===name)||{}).category||'Other'; }
+function monthRecords(){ return DB.records.filter(r=>{ const d=new Date(r.date); return d.getMonth()===currentMonth&&d.getFullYear()===currentYear; }); }
+
+// ══ MONTH ══
+const MO=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function updateMonthLabels(){
+  const lbl=`${MO[currentMonth]} ${currentYear}`;
+  ['monthLabel','monthLabel2','monthLabel3'].forEach(id=>{ const el=document.getElementById(id); if(el)el.textContent=lbl; });
+}
+function changeMonth(d){
+  currentMonth+=d;
+  if(currentMonth<0){currentMonth=11;currentYear--;}
+  if(currentMonth>11){currentMonth=0;currentYear++;}
+  updateMonthLabels();
+  const a=document.querySelector('.page.active');
+  if(a){ const id=a.id.replace('page-',''); if(id==='dashboard')renderDashboard(); if(id==='records')renderRecords(); if(id==='analytics')renderAnalytics(); }
+}
+
+// ══ NAV ══
+const PAGES=['dashboard','add','records','customers','analytics','settings'];
+const LABELS={dashboard:'Dashboard',add:'Add Appointment',records:'History',customers:'Clients',analytics:'Analytics',settings:'Settings'};
+function nav(id){
+  PAGES.forEach(p=>document.getElementById('page-'+p).classList.toggle('active',p===id));
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.textContent.trim().startsWith(LABELS[id])));
+  document.querySelectorAll('.mnav-item').forEach((el,i)=>el.classList.toggle('active',i===PAGES.indexOf(id)));
+  if(id==='dashboard')renderDashboard();
+  if(id==='records')renderRecords();
+  if(id==='customers')renderCustomers();
+  if(id==='analytics')renderAnalytics();
+  if(id==='settings')renderSettings();
+  if(id==='add')initForm();
+}
+
+// ══ COMMISSION HELPER ══
+const COMMISSION_RATE = 0.495; // 49.5%
+const GC_SVC_NAME = 'GC Green Circle Eco-friendly';
+
+// Returns commission-eligible revenue (excludes GC fee records)
+function commissionBase(records) {
+  return records
+    .filter(r => {
+      // For multi-service records, check if ALL services are GC (rare edge case)
+      if (r.services) return !r.services.every(s => s === GC_SVC_NAME);
+      return r.service !== GC_SVC_NAME;
+    })
+    .reduce((s, r) => s + (+r.amount || 0), 0);
+}
+
+// Count GC fees charged this month (1 per client per day max already handled by user)
+function gcCount(records) {
+  return records.filter(r => r.service === GC_SVC_NAME).length;
+}
+
+// ══ DASHBOARD ══
+function renderDashboard(){
+  updateMonthLabels();
+  const today=todayStr(), mr=monthRecords(), tr=DB.records.filter(r=>r.date===today);
+  const mSales=mr.reduce((s,r)=>s+(+r.amount||0),0), mTips=mr.reduce((s,r)=>s+(+r.tip||0),0);
+  const mCount=mr.length, mAvg=mCount?mSales/mCount:0;
+  const tSales=tr.reduce((s,r)=>s+(+r.amount||0),0), tCount=tr.length;
+  let pm=currentMonth-1,py=currentYear; if(pm<0){pm=11;py--;}
+  const pmr=DB.records.filter(r=>{const d=new Date(r.date);return d.getMonth()===pm&&d.getFullYear()===py;});
+  const pmSales=pmr.reduce((s,r)=>s+(+r.amount||0),0);
+  const diff=pmSales?(mSales-pmSales)/pmSales*100:null;
+
+  // Commission
+  const mCommBase = commissionBase(mr);
+  const mComm = mCommBase * COMMISSION_RATE;
+  const pmComm = commissionBase(pmr) * COMMISSION_RATE;
+  const commDiff = pmComm ? (mComm - pmComm) / pmComm * 100 : null;
+
+  document.getElementById('statGrid').innerHTML=`
+    <div class="stat-card"><div class="stat-label">Monthly Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(mSales)}</div>
+      <div class="stat-delta ${diff===null?'':diff>=0?'d-up':'d-down'}">${diff===null?'No prev. data':(diff>=0?'↑ ':'↓ ')+Math.abs(diff).toFixed(1)+'% vs last month'}</div></div>
+    <div class="stat-card" style="border-color:#a5b4fc;background:linear-gradient(135deg,#eef2ff,#fff)">
+      <div class="stat-label" style="color:var(--accent)">My Commission <span style="font-weight:400;opacity:.7">(49.5%)</span></div>
+      <div class="stat-value" style="color:var(--accent)"><sup style="color:var(--accent)">$</sup>${Math.round(mComm)}</div>
+      <div class="stat-delta ${commDiff===null?'':commDiff>=0?'d-up':'d-down'}">${commDiff===null?`Base: $${fmt(mCommBase)}`:(commDiff>=0?'↑ ':'↓ ')+Math.abs(commDiff).toFixed(1)+'% vs last month'}</div></div>
+    <div class="stat-card"><div class="stat-label">Tips</div><div class="stat-value"><sup>$</sup>${Math.round(mTips)}</div>
+      <div class="stat-delta">Comm + Tips: $${fmt(mComm+mTips)}</div></div>
+    <div class="stat-card"><div class="stat-label">Clients Served</div><div class="stat-value">${mCount}</div>
+      <div class="stat-delta">this month</div></div>
+    <div class="stat-card"><div class="stat-label">Avg. per Client</div><div class="stat-value"><sup>$</sup>${Math.round(mAvg)}</div>
+      <div class="stat-delta">per appointment</div></div>
+    <div class="stat-card"><div class="stat-label">Today's Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(tSales)}</div>
+      <div class="stat-delta">${tCount} client${tCount!==1?'s':''} today</div></div>`;
+
+  document.getElementById('todayCount').textContent = tCount?`${tCount} appointment${tCount!==1?'s':''}`:'No appointments yet';
+  const tb=document.getElementById('todayTable');
+  tb.innerHTML=!tr.length
+    ?'<tr class="tbl-empty"><td colspan="6">No appointments today — <a href="#" onclick="nav(\'add\');return false" style="color:var(--accent)">add one →</a></td></tr>'
+    :tr.sort((a,b)=>(a.time||'').localeCompare(b.time||'')).map(r=>`<tr>
+      <td style="font-weight:600">${r.client}</td>
+      <td>${r.service.split(' + ').map(s=>`<span class="badge badge-${svcCat(s)}" style="font-size:11px;margin-right:3px">${s}</span>`).join('')}</td>
+      <td class="mono" style="font-weight:600">$${fmt(r.amount)}</td>
+      <td class="mono" style="color:var(--green)">${r.tip?'$'+fmt(r.tip):'—'}</td>
+      <td style="color:var(--text-3);font-size:12px">${r.time||'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;margin-right:4px" onclick="openEdit('${r.id}')">✏️</button>
+        <button class="btn btn-danger" onclick="deleteRecord('${r.id}')">🗑</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ══ SERVICE PICKER (multi-select) ══
+function buildPicker(filter=''){
+  const cats={};
+  DB.services.forEach(s=>{
+    if(filter&&!s.name.toLowerCase().includes(filter.toLowerCase())&&!s.category.toLowerCase().includes(filter.toLowerCase()))return;
+    if(!cats[s.category])cats[s.category]=[];
+    cats[s.category].push(s);
+  });
+  document.getElementById('svcPicker').innerHTML=Object.entries(cats).map(([cat,svcs])=>`
+    <div class="svc-cat-hd">${cat}</div>
+    ${svcs.map(s=>{
+      const sel=selectedSvcs.includes(s.name);
+      return `<div class="svc-row${sel?' selected':''}" onclick="toggleSvc('${s.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
+        <div><div class="svc-row-name">${s.name}</div><div class="svc-row-meta">${s.duration} min</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="svc-row-price">$${s.defaultPrice}</div>
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'white'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
+            ${sel?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  `).join('')||'<div style="padding:16px;color:var(--text-3);font-size:13px">No results</div>';
+}
+
+function filterSvc(v){ buildPicker(v); }
+
+function toggleSvc(name){
+  const idx=selectedSvcs.indexOf(name);
+  if(idx>=0) selectedSvcs.splice(idx,1);
+  else selectedSvcs.push(name);
+  updateSvcChips();
+  buildPicker(document.getElementById('svcSearch').value);
+}
+
+function updateSvcChips(){
+  const chips=document.getElementById('svcChips');
+  const badge=document.getElementById('svcCountBadge');
+  const autoTotal=document.getElementById('svcAutoTotal');
+
+  if(!selectedSvcs.length){
+    chips.innerHTML='';
+    badge.style.display='none';
+    autoTotal.style.display='none';
+    return;
+  }
+
+  badge.textContent=selectedSvcs.length;
+  badge.style.display='';
+
+  chips.innerHTML=selectedSvcs.map(name=>{
+    const s=DB.services.find(x=>x.name===name)||{};
+    const cat=s.category||'Other';
+    return `<span class="svc-chip badge-${cat}" style="background:var(--accent-soft);color:var(--accent);border:1.5px solid #c7d2fe">
+      ${name}
+      <span class="svc-chip-remove" onclick="toggleSvc('${name.replace(/'/g,"\\'")}')">×</span>
+    </span>`;
+  }).join('');
+
+  // Auto-calculate total price and duration
+  const totalPrice=selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+  const totalDur=selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).duration||0),0);
+  document.getElementById('fAmount').value=totalPrice;
+  document.getElementById('fDuration').value=totalDur;
+  autoTotal.style.display='';
+  autoTotal.textContent=`Auto-total: $${totalPrice} · ${totalDur} min — adjust if needed`;
+  // Re-apply discount if checked
+  const discOn = document.getElementById('discStudent').checked || document.getElementById('discResidence').checked;
+  if (discOn) applyDiscount(); else calcTip();
+}
+
+// ══ ADD / SAVE ══
+function initForm(){
+  if(!document.getElementById('fDate').value) document.getElementById('fDate').value=todayStr();
+  selectedSvcs=[];
+  updateSvcChips();
+  document.getElementById('svcSearch').value='';
+  buildPicker();
+  const dl=document.getElementById('clientList');
+  dl.innerHTML=[...new Set(DB.records.map(r=>r.client))].sort().map(n=>`<option value="${n}">`).join('');
+}
+
+function saveRecord(){
+  const date=document.getElementById('fDate').value;
+  const client=document.getElementById('fClient').value.trim();
+  const amount=parseFloat(document.getElementById('fAmount').value)||0;
+  const tip=parseFloat(document.getElementById('fTip').value)||0;
+  const duration=parseInt(document.getElementById('fDuration').value)||0;
+  const note=document.getElementById('fNote').value.trim();
+  if(!date||!client||!selectedSvcs.length){ toast('⚠️ Fill in Date, Client and select at least one Service'); return; }
+  // Save as combined service string (comma-separated) for display, store array too
+  const serviceLabel = selectedSvcs.join(' + ');
+  DB.records.push({
+    id:Date.now().toString(), date, client,
+    service: serviceLabel,
+    services: [...selectedSvcs], // array for future use
+    amount, tip, duration, note,
+    time:new Date().toTimeString().slice(0,5)
+  });
+  save(); toast('✓ Appointment saved!'); clearForm();
+}
+
+function clearForm(){
+  ['fClient','fAmount','fTip','fDuration','fNote','fTotalSale'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('fDate').value=todayStr();
+  document.getElementById('gcIncluded').checked=true;
+  document.getElementById('discStudent').checked=false;
+  document.getElementById('discResidence').checked=false;
+  document.getElementById('discResult').style.display='none';
+  document.getElementById('tipResult').textContent='—';
+  document.getElementById('tipBreakdown').innerHTML='';
+  document.getElementById('tipApplyBtn').style.display='none';
+  lastCalcTip=null;
+  selectedSvcs=[];
+  updateSvcChips();
+  document.getElementById('svcSearch').value=''; buildPicker();
+}
+function deleteRecord(id){
+  if(!confirm('Delete this appointment?'))return;
+  DB.records=DB.records.filter(r=>r.id!==id); save();
+  renderDashboard(); renderRecords(); toast('Deleted');
+}
+
+// ══ EDIT RECORD ══
+let editingId = null;
+
+function openEdit(id){
+  const r = DB.records.find(x=>x.id===id);
+  if(!r) return;
+  editingId = id;
+  document.getElementById('eFDate').value    = r.date||'';
+  document.getElementById('eFClient').value  = r.client||'';
+  document.getElementById('eFService').value = r.service||'';
+  document.getElementById('eFAmount').value  = r.amount||'';
+  document.getElementById('eFTip').value     = r.tip||'';
+  document.getElementById('eFDuration').value= r.duration||'';
+  document.getElementById('eFNote').value    = r.note||'';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal(){
+  document.getElementById('editModal').classList.remove('open');
+  editingId = null;
+}
+
+function saveEdit(){
+  if(!editingId) return;
+  const r = DB.records.find(x=>x.id===editingId);
+  if(!r){ closeEditModal(); return; }
+  r.date     = document.getElementById('eFDate').value;
+  r.client   = document.getElementById('eFClient').value.trim();
+  r.service  = document.getElementById('eFService').value.trim();
+  r.amount   = parseFloat(document.getElementById('eFAmount').value)||0;
+  r.tip      = parseFloat(document.getElementById('eFTip').value)||0;
+  r.duration = parseInt(document.getElementById('eFDuration').value)||0;
+  r.note     = document.getElementById('eFNote').value.trim();
+  save();
+  closeEditModal();
+  renderDashboard(); renderRecords();
+  toast('✓ Changes saved!');
+}
+
+function deleteFromEdit(){
+  if(!editingId) return;
+  if(!confirm('Delete this appointment?')) return;
+  DB.records = DB.records.filter(r=>r.id!==editingId);
+  save();
+  closeEditModal();
+  renderDashboard(); renderRecords();
+  toast('Deleted');
+}
+
+// ══ HISTORY ══
+function renderRecords(){
+  updateMonthLabels();
+  const mr=monthRecords().sort((a,b)=>b.date.localeCompare(a.date));
+  const total=mr.reduce((s,r)=>s+(+r.amount||0),0);
+  const tips=mr.reduce((s,r)=>s+(+r.tip||0),0);
+  document.getElementById('recordsSub').textContent=mr.length?`${mr.length} appointments · $${fmt(total)} revenue · $${fmt(tips)} tips`:'No records this month';
+
+  const list=document.getElementById('recordsList');
+  if(!mr.length){
+    list.innerHTML=`<div style="text-align:center;padding:48px 16px;color:var(--text-3);font-size:13px">No records for this month</div>`;
+    return;
+  }
+
+  // Group by date
+  const byDate={};
+  mr.forEach(r=>{ if(!byDate[r.date])byDate[r.date]=[]; byDate[r.date].push(r); });
+
+  list.innerHTML=Object.entries(byDate).map(([date,recs])=>`
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-left:2px">
+        ${new Date(date+'T12:00:00').toLocaleDateString('en-CA',{weekday:'long',month:'long',day:'numeric'})}
+      </div>
+      ${recs.map(r=>{
+        const cat=svcCat(r.service);
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;box-shadow:var(--shadow)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:700;margin-bottom:4px">${r.client}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px">
+                ${r.service.split(' + ').map(s=>`<span class="badge badge-${svcCat(s)}" style="font-size:11px">${s}</span>`).join('')}
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">$${fmt(r.amount)}</div>
+              ${r.tip?`<div style="font-size:12px;color:var(--green);font-weight:600">+$${fmt(r.tip)} tip</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;gap:12px;font-size:12px;color:var(--text-3)">
+              ${r.time?`<span>🕐 ${r.time}</span>`:''}
+              ${r.duration?`<span>⏱ ${r.duration}m</span>`:''}
+              ${r.note?`<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.note}">📝 ${r.note}</span>`:''}
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" style="padding:5px 14px;font-size:12.5px" onclick="openEdit('${r.id}')">✏️ Edit</button>
+              <button class="btn btn-danger" style="padding:5px 10px" onclick="deleteRecord('${r.id}')">🗑</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+// ══ CLIENTS ══
+function renderCustomers(){
+  const clients={};
+  DB.records.forEach(r=>{ if(!clients[r.client])clients[r.client]={visits:[],total:0,tips:0,svcs:{}}; clients[r.client].visits.push(r.date); clients[r.client].total+=(+r.amount||0); clients[r.client].tips+=(+r.tip||0); clients[r.client].svcs[r.service]=(clients[r.client].svcs[r.service]||0)+1; });
+  const grid=document.getElementById('customerGrid');
+  const count=Object.keys(clients).length;
+  document.getElementById('clientsSub').textContent=count?`${count} total clients`:'';
+  if(!count){ grid.innerHTML='<p style="color:var(--text-3);font-size:13px">No clients yet. Add appointments to build your list.</p>'; return; }
+  grid.innerHTML=Object.entries(clients).sort((a,b)=>b[1].visits.length-a[1].visits.length).map(([name,data])=>{
+    const v=data.visits.length, last=[...data.visits].sort().reverse()[0];
+    const dot=v>=5?'var(--green)':v>=2?'var(--amber)':'var(--red)';
+    return `<div class="client-card" onclick="showClient('${name.replace(/'/g,"\\'")}')">
+      <div class="client-avatar">${initials(name)}</div>
+      <div class="client-name">${name}</div>
+      <div>
+        <div class="client-meta-row"><span class="dot" style="background:${dot}"></span>${v} visit${v!==1?'s':''}</div>
+        <div class="client-meta-row" style="color:var(--text-3)">$${fmt(data.total)} revenue</div>
+        <div class="client-meta-row" style="color:var(--text-3)">Last: ${fmtDate(last)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function showClient(name){
+  const recs=DB.records.filter(r=>r.client===name).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=recs.reduce((s,r)=>s+(+r.amount||0),0), tips=recs.reduce((s,r)=>s+(+r.tip||0),0);
+  const svcMap={}; recs.forEach(r=>svcMap[r.service]=(svcMap[r.service]||0)+1);
+  const topSvcs=Object.entries(svcMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  document.getElementById('modalTitle').textContent=name;
+  document.getElementById('modalBody').innerHTML=`
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Visits</div><div class="stat-value">${recs.length}</div></div>
+      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(total)}</div></div>
+      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Tips</div><div class="stat-value"><sup>$</sup>${Math.round(tips)}</div></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Top Services</div>
+      ${topSvcs.map(([s,n])=>`<span class="badge badge-${svcCat(s)}" style="margin-right:6px;margin-bottom:4px">${s} ×${n}</span>`).join('')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Visit History</div>
+    <table class="tbl"><thead><tr><th>Date</th><th>Service</th><th>Amount</th><th>Notes</th></tr></thead>
+    <tbody>${recs.slice(0,12).map(r=>`<tr>
+      <td style="font-size:12px">${fmtDate(r.date)}</td>
+      <td><span class="badge badge-${svcCat(r.service)}" style="font-size:10.5px">${r.service}</span></td>
+      <td class="mono" style="font-size:12px">$${fmt(r.amount)}</td>
+      <td style="font-size:11px;color:var(--text-3);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||'—'}</td>
+    </tr>`).join('')}</tbody></table>`;
+  document.getElementById('clientModal').classList.add('open');
+}
+function closeModal(){ document.getElementById('clientModal').classList.remove('open'); }
+
+// ══ ANALYTICS ══
+function renderAnalytics(){
+  updateMonthLabels();
+  const mr=monthRecords();
+
+  // Commission summary card
+  const mCommBase = commissionBase(mr);
+  const mComm = mCommBase * COMMISSION_RATE;
+  const mTips = mr.reduce((s,r)=>s+(+r.tip||0),0);
+  const gcRecs = mr.filter(r=>r.service===GC_SVC_NAME).length;
+  document.getElementById('commSummary').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+      <div class="stat-card" style="box-shadow:none;border-color:#a5b4fc;background:linear-gradient(135deg,#eef2ff,#fff)">
+        <div class="stat-label" style="color:var(--accent)">Commission Base</div>
+        <div class="stat-value" style="font-size:22px"><sup style="font-size:12px;color:var(--accent)">$</sup>${fmt(mCommBase)}</div>
+        <div class="stat-delta">excl. ${gcRecs} GC fee${gcRecs!==1?'s':''}</div>
+      </div>
+      <div class="stat-card" style="box-shadow:none;border-color:#a5b4fc;background:linear-gradient(135deg,#eef2ff,#fff)">
+        <div class="stat-label" style="color:var(--accent)">My Commission (49.5%)</div>
+        <div class="stat-value" style="font-size:22px;color:var(--accent)"><sup style="font-size:12px">$</sup>${fmt(mComm)}</div>
+        <div class="stat-delta">this month</div>
+      </div>
+      <div class="stat-card" style="box-shadow:none">
+        <div class="stat-label">Tips</div>
+        <div class="stat-value" style="font-size:22px"><sup style="font-size:12px;color:var(--text-2)">$</sup>${fmt(mTips)}</div>
+        <div class="stat-delta">this month</div>
+      </div>
+      <div class="stat-card" style="box-shadow:none;background:#f0fdf4;border-color:#6ee7b7">
+        <div class="stat-label" style="color:var(--green)">Commission + Tips</div>
+        <div class="stat-value" style="font-size:22px;color:var(--green)"><sup style="font-size:12px">$</sup>${fmt(mComm+mTips)}</div>
+        <div class="stat-delta">total take-home</div>
+      </div>
+    </div>
+  `;
+
+  const svc={};
+  mr.forEach(r=>{ const cat=svcCat(r.service); svc[cat]=(svc[cat]||0)+(+r.amount||0); });
+  const maxS=Math.max(...Object.values(svc),1);
+  document.getElementById('serviceChart').innerHTML=Object.entries(svc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`
+    <div class="bar-row"><div class="bar-label">${k}</div><div class="bar-track"><div class="bar-fill" style="width:${v/maxS*100}%">${v>50?'$'+Math.round(v):''}</div></div><div class="bar-val">$${Math.round(v)}</div></div>
+  `).join('')||'<p style="color:var(--text-3);font-size:13px">No data this month</p>';
+
+  const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const wday={}; mr.forEach(r=>{ const d=DAYS[new Date(r.date+'T12:00:00').getDay()]; wday[d]=(wday[d]||0)+1; });
+  const maxW=Math.max(...Object.values(wday),1);
+  document.getElementById('weekdayChart').innerHTML=DAYS.filter(d=>wday[d]).map(d=>`
+    <div class="bar-row"><div class="bar-label">${d}</div><div class="bar-track"><div class="bar-fill" style="width:${wday[d]/maxW*100}%">${wday[d]}</div></div><div class="bar-val">${wday[d]}c</div></div>
+  `).join('')||'<p style="color:var(--text-3);font-size:13px">No data</p>';
+
+  // Monthly revenue + commission chart (last 6 months)
+  const months=[]; for(let i=5;i>=0;i--){ let m=currentMonth-i,y=currentYear; if(m<0){m+=12;y--;} const recs=DB.records.filter(r=>{const d=new Date(r.date);return d.getMonth()===m&&d.getFullYear()===y;}); const tot=recs.reduce((s,r)=>s+(+r.amount||0),0); const comm=commissionBase(recs)*COMMISSION_RATE; const tips=recs.reduce((s,r)=>s+(+r.tip||0),0); months.push({label:`${MS[m]} ${y}`,total:tot,comm,tips}); }
+  const maxM=Math.max(...months.map(m=>m.total),1);
+  document.getElementById('monthChart').innerHTML=months.map(m=>`
+    <div class="bar-row">
+      <div class="bar-label">${m.label}</div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+        <div class="bar-track" style="height:18px"><div class="bar-fill" style="width:${m.total/maxM*100}%;background:linear-gradient(90deg,#818cf8,#a5b4fc)">${m.total>80?'$'+Math.round(m.total):''}</div></div>
+        <div class="bar-track" style="height:14px;background:#dcfce7"><div class="bar-fill" style="width:${m.total?m.comm/m.total*100:0}%;background:linear-gradient(90deg,var(--green),#34d399);font-size:10px">${m.comm>30?'$'+Math.round(m.comm):''}</div></div>
+      </div>
+      <div class="bar-val" style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+        <span style="font-size:12px;font-weight:600">$${Math.round(m.total)}</span>
+        <span style="font-size:10px;color:var(--green);font-weight:600">$${Math.round(m.comm)}</span>
+      </div>
+    </div>
+  `).join('');
+  // Legend
+  document.getElementById('monthChartLegend').innerHTML=`
+    <div style="display:flex;gap:16px;font-size:11px;color:var(--text-3);margin-top:8px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:linear-gradient(90deg,#818cf8,#a5b4fc);border-radius:2px;display:inline-block"></span>Revenue</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:var(--green);border-radius:2px;display:inline-block"></span>Commission (49.5%)</span>
+    </div>`;
+}
+function switchTab(btn,id){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.getElementById('tab-stats').style.display=id==='tab-stats'?'':'none';
+  document.getElementById('tab-ai').style.display=id==='tab-ai'?'':'none';
+}
+
+// ══ AI ══
+async function runAI(){
+  const el=document.getElementById('aiResult');
+  el.className='ai-result loading'; el.textContent='分析中... しばらくお待ちください';
+  const mr=monthRecords();
+  if(!mr.length){ el.className='ai-result'; el.textContent='この月のデータがありません。施術を追加してから分析してください。'; return; }
+  const total=mr.reduce((s,r)=>s+(+r.amount||0),0), tips=mr.reduce((s,r)=>s+(+r.tip||0),0), count=mr.length;
+  const commBase=commissionBase(mr), comm=commBase*COMMISSION_RATE;
+  const catCount={}; mr.forEach(r=>{const c=svcCat(r.service);catCount[c]=(catCount[c]||0)+1;});
+  const svcCount={}; mr.forEach(r=>svcCount[r.service]=(svcCount[r.service]||0)+1);
+  const allClients={}; DB.records.forEach(r=>allClients[r.client]=(allClients[r.client]||0)+1);
+  const repeatClients=Object.values(allClients).filter(v=>v>1).length, totalClients=Object.keys(allClients).length;
+
+  const prompt=`あなたはカナダのベテラン美容師のパーソナルコーチです。以下のデータを分析して、日本語で具体的なアドバイスをしてください。
+
+【${currentYear}年${MO[currentMonth]}のデータ】
+- 施術人数: ${count}人
+- 売上合計: $${fmt(total)} CAD
+- コミッション (49.5%): $${fmt(comm)} CAD
+- チップ合計: $${fmt(tips)} CAD
+- 手取り合計 (コミッション+チップ): $${fmt(comm+tips)} CAD
+- 平均客単価: $${fmt(count?total/count:0)} CAD
+- カテゴリー別: ${Object.entries(catCount).map(([k,v])=>k+': '+v+'件').join(' / ')}
+- 人気サービスTOP3: ${Object.entries(svcCount).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+' ('+v+'件)').join(', ')}
+- 総顧客数: ${totalClients}人 / リピーター: ${repeatClients}人 (リピート率${totalClients?Math.round(repeatClients/totalClients*100):0}%)
+
+以下の形式で回答してください：
+
+**📊 今月の総評**
+（2〜3文）
+
+**💪 強み**
+（2点）
+
+**🎯 改善ポイント**
+（2点）
+
+**🚀 来月のアクションプラン**
+1. 
+2. 
+3. 
+
+実践的で具体的なアドバイスをお願いします。`;
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    const data=await res.json();
+    el.className='ai-result'; el.textContent=data.content?.map(c=>c.text||'').join('')||'分析に失敗しました。';
+  }catch(e){ el.className='ai-result'; el.textContent='エラーが発生しました。もう一度お試しください。'; }
+}
+
+// ══ SETTINGS ══
+function renderSettings(){
+  const cats={}; DB.services.forEach((s,i)=>{ const c=s.category||'Other'; if(!cats[c])cats[c]=[]; cats[c].push({...s,idx:i}); });
+  document.getElementById('serviceListUI').innerHTML=Object.entries(cats).map(([cat,svcs])=>`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px">${cat}</div>
+      ${svcs.map(s=>`
+        <div id="svcRow_${s.idx}" style="background:var(--bg);border-radius:var(--radius-sm);margin-bottom:4px;overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px">
+            <div><span style="font-size:13px;font-weight:600">${s.name}</span><span style="font-size:12px;color:var(--text-3);margin-left:8px">$${s.defaultPrice} · ${s.duration||'?'}min</span></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px" onclick="toggleSvcEdit(${s.idx})">Edit</button>
+              <button class="btn btn-danger" onclick="removeService(${s.idx})">Remove</button>
+            </div>
+          </div>
+          <div id="svcEdit_${s.idx}" style="display:none;padding:10px 12px;border-top:1px solid var(--border);background:white">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+              <div class="form-group" style="flex:2;min-width:120px"><label class="form-label">Name</label><input class="form-input" type="text" id="svcEditName_${s.idx}" value="${s.name}"></div>
+              <div class="form-group" style="width:80px"><label class="form-label">Price ($)</label><input class="form-input mono" type="number" id="svcEditPrice_${s.idx}" value="${s.defaultPrice}"></div>
+              <div class="form-group" style="width:80px"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="svcEditDur_${s.idx}" value="${s.duration||60}"></div>
+              <button class="btn btn-primary btn-sm" onclick="saveSvcEdit(${s.idx})">Save</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleSvcEdit(${s.idx})">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function toggleSvcEdit(idx){
+  const el=document.getElementById(`svcEdit_${idx}`);
+  el.style.display=el.style.display==='none'?'':'none';
+}
+
+function saveSvcEdit(idx){
+  const name=document.getElementById(`svcEditName_${idx}`).value.trim();
+  const price=parseFloat(document.getElementById(`svcEditPrice_${idx}`).value)||0;
+  const dur=parseInt(document.getElementById(`svcEditDur_${idx}`).value)||60;
+  if(!name){toast('Name cannot be empty');return;}
+  DB.services[idx].name=name;
+  DB.services[idx].defaultPrice=price;
+  DB.services[idx].duration=dur;
+  save(); renderSettings(); toast('✓ Service updated!');
+}
+function addService(){
+  const name=document.getElementById('newServiceName').value.trim();
+  const price=parseFloat(document.getElementById('newServicePrice').value)||0;
+  const duration=parseInt(document.getElementById('newServiceDuration').value)||60;
+  const category=document.getElementById('newServiceCat').value||'Other';
+  if(!name){toast('Enter a service name');return;}
+  DB.services.push({name,defaultPrice:price,category,duration});
+  save();
+  document.getElementById('newServiceName').value='';
+  document.getElementById('newServicePrice').value='';
+  document.getElementById('newServiceDuration').value='';
+  renderSettings(); toast('Service added!');
+}
+function removeService(i){ if(!confirm('Remove this service?'))return; DB.services.splice(i,1); save(); renderSettings(); toast('Removed'); }
+function exportData(){ const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'}),a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`stylist-data-${todayStr()}.json`; a.click(); }
+function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>{try{const d=JSON.parse(ev.target.result); if(d.records&&d.services){DB=d;save();toast('Data imported!');renderSettings();}}catch{toast('⚠️ Invalid file');}}; r.readAsText(f); }
+function clearAllData(){ DB.records=[]; save(); renderDashboard(); toast('All records deleted'); }
+
+// ══ TIP CALCULATOR ══
+// BC: hair services = GST 5% only (PST exempt)
+// GC (Green Circle) fee = no tax
+const TAX_RATE = 0.05;
+const GC_PRICE = 3.00;
+
+// ══ DISCOUNT RULES ══
+const STUDENT_ELIGIBLE = [
+  'Clipper & Scissor Cut',
+  'Classic Hair Cut - Short to Long'
+];
+const RESIDENCE_EXCLUDED = [
+  'Bang / Fringe Trim',
+  'Barber Cut',
+  'CC Child Haircut',
+  'Teenager Clipper & Scissor Cut (Short)',
+  'Teenager Scissor Cut (Medium/Long)'
+];
+const RESIDENCE_MIN_PRICE = 50;
+
+function applyDiscount() {
+  const studentOn   = document.getElementById('discStudent').checked;
+  const residenceOn = document.getElementById('discResidence').checked;
+  const resultEl    = document.getElementById('discResult');
+
+  if (!selectedSvcs.length) {
+    resultEl.style.display = 'none';
+    return;
+  }
+
+  // Check student eligibility: date must be Mon or Wed
+  const dateVal = document.getElementById('fDate').value;
+  const dayOfWeek = dateVal ? new Date(dateVal + 'T12:00:00').getDay() : -1; // 1=Mon, 3=Wed
+  const isMonWed = dayOfWeek === 1 || dayOfWeek === 3;
+
+  let lines = [];
+  let totalOriginal = 0;
+  let totalDiscounted = 0;
+
+  selectedSvcs.forEach(name => {
+    const svc = DB.services.find(s => s.name === name) || {};
+    const price = svc.defaultPrice || 0;
+    totalOriginal += price;
+
+    let discountedPrice = price;
+    let discLabel = '';
+
+    if (studentOn && STUDENT_ELIGIBLE.includes(name)) {
+      if (isMonWed) {
+        discountedPrice = price * 0.90;
+        discLabel = ' −10% student';
+      } else {
+        discLabel = ' ⚠️ Student only Mon/Wed';
+      }
+    } else if (residenceOn && !RESIDENCE_EXCLUDED.includes(name) && price >= RESIDENCE_MIN_PRICE) {
+      discountedPrice = price * 0.80;
+      discLabel = ' −20% residence';
+    }
+
+    totalDiscounted += discountedPrice;
+    if (discLabel) lines.push(`${name}: $${price} → $${discountedPrice.toFixed(2)}${discLabel}`);
+  });
+
+  const saved = totalOriginal - totalDiscounted;
+
+  if (!studentOn && !residenceOn) {
+    resultEl.style.display = 'none';
+    // Restore original total
+    const orig = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+    document.getElementById('fAmount').value = orig;
+    calcTip();
+    return;
+  }
+
+  if (lines.length === 0) {
+    resultEl.style.display = '';
+    resultEl.innerHTML = `<span style="color:var(--amber)">⚠️ 選択中のサービスは割引対象外です</span>`;
+    const orig = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+    document.getElementById('fAmount').value = orig;
+    calcTip();
+    return;
+  }
+
+  // Apply discounted amount
+  document.getElementById('fAmount').value = totalDiscounted.toFixed(2);
+  calcTip();
+
+  resultEl.style.display = '';
+  resultEl.innerHTML = lines.map(l=>`<div>${l}</div>`).join('') +
+    `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #a7f3d0;font-weight:700">
+      Total: $${totalOriginal} → $${totalDiscounted.toFixed(2)} 
+      <span style="color:var(--green)">(−$${saved.toFixed(2)} saved)</span>
+    </div>`;
+}
+
+let lastCalcTip = null;
+
+function calcTip() {
+  const totalSale = parseFloat(document.getElementById('fTotalSale').value) || 0;
+  const amount    = parseFloat(document.getElementById('fAmount').value) || 0;
+  const gcOn      = document.getElementById('gcIncluded').checked;
+
+  const breakdown = document.getElementById('tipBreakdown');
+  const result    = document.getElementById('tipResult');
+  const applyBtn  = document.getElementById('tipApplyBtn');
+
+  if (!totalSale || !amount) {
+    breakdown.innerHTML = '<span style="color:var(--text-3)">Enter Total Sale &amp; Amount</span>';
+    result.textContent = '—';
+    applyBtn.style.display = 'none';
+    lastCalcTip = null;
+    return;
+  }
+
+  // Service: GST 5% / GC: tax-exempt
+  const taxAmount   = amount * TAX_RATE;
+  const gcCharge    = gcOn ? GC_PRICE : 0;
+  const subtotal    = amount + taxAmount + gcCharge;
+  const tip         = totalSale - subtotal;
+
+  breakdown.innerHTML = `
+    Service: $${amount.toFixed(2)}<br>
+    GST (5%): $${taxAmount.toFixed(2)}<br>
+    ${gcOn ? `GC fee: $${GC_PRICE.toFixed(2)} (tax-free)<br>` : ''}
+    Subtotal: $${subtotal.toFixed(2)}
+  `;
+
+  if (tip >= 0) {
+    result.textContent = `$${tip.toFixed(2)}`;
+    result.style.color = tip > 0 ? 'var(--accent)' : 'var(--text-3)';
+    lastCalcTip = tip;
+    applyBtn.style.display = 'none';
+    // 即座にTipフィールドに反映
+    document.getElementById('fTip').value = tip.toFixed(2);
+  } else {
+    result.textContent = '?';
+    result.style.color = 'var(--red)';
+    result.title = 'Negative result — check amounts';
+    lastCalcTip = null;
+    applyBtn.style.display = 'none';
+    document.getElementById('fTip').value = '';
+  }
+}
+
+function applyTip() {} // 廃止（自動反映に変更）
+
+// ══ INIT ══
+load();
+updateMonthLabels();
+document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+renderDashboard();
+initForm();
+</script>
+</body>
+</html>
