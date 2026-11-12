@@ -224,7 +224,7 @@ input:-webkit-autofill:focus {
 
 /* MOBILE */
 .mobile-nav { display:none; position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); z-index:100; padding:6px 0 18px; justify-content:space-around; }
-.mnav-item { display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--text-3); font-size:10px; font-weight:700; padding:4px 8px; }
+.mnav-item { display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; color:var(--text-3); font-size:10px; font-weight:700; padding:4px 3px; }
 .mnav-item.active { color:var(--accent); }
 .mnav-item svg { width:22px; height:22px; stroke-width:2; }
 
@@ -275,9 +275,12 @@ input:-webkit-autofill:focus {
     <div class="nav-item" onclick="nav('customers')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Clients
     </div>
+    <div class="nav-item" onclick="nav('periods')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15h3M13 15h3"/></svg>Pay Periods
+    </div>
     <div class="nav-section-label">Insights</div>
     <div class="nav-item" onclick="nav('analytics')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Analytics & AI
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Analytics
     </div>
   </nav>
   <div class="nav-bottom">
@@ -315,7 +318,7 @@ input:-webkit-autofill:focus {
         <span class="card-title">Today's Appointments</span>
         <span style="font-size:12.5px;color:var(--text-3)" id="todayCount"></span>
       </div>
-      <table class="tbl"><thead><tr><th>Client</th><th>Service</th><th>Amount</th><th>Tip</th><th>Time</th><th></th></tr></thead>
+      <table class="tbl"><thead><tr><th>Client</th><th>Service</th><th>Amount</th><th>Before disc.</th><th>Time</th><th></th></tr></thead>
       <tbody id="todayTable"></tbody></table>
     </div>
 
@@ -363,14 +366,27 @@ input:-webkit-autofill:focus {
           <!-- Auto-total note -->
           <div id="svcAutoTotal" style="display:none;font-size:12px;color:var(--accent);margin-top:6px;font-weight:600"></div>
         </div>
-        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:16px">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
           <div class="form-group">
-            <label class="form-label">Amount (CAD $)</label>
+            <label class="form-label">Price before discount ($)</label>
+            <input class="form-input mono" type="number" id="fListPrice" placeholder="0.00" min="0" step="0.01" oninput="listManual=true">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Amount after discount ($)</label>
             <input class="form-input mono" type="number" id="fAmount" placeholder="0.00" min="0" step="0.01" oninput="onAmountManualEdit()">
             <div id="amountOverrideNote" style="display:none;font-size:11px;color:var(--amber);margin-top:3px;font-weight:600">✏️ Custom amount — discounts paused</div>
           </div>
-          <div class="form-group"><label class="form-label" id="tipFieldLabel">Tip (CAD $)</label><input class="form-input mono" type="number" id="fTip" placeholder="0.00" min="0" step="0.01"></div>
           <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="fDuration" placeholder="60"></div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="fKind" onchange="onKindChange('f')">
+            <option value="normal">Normal</option>
+            <option value="fulltip">Full tip ($0 sale)</option>
+            <option value="noshow">No-show</option>
+            <option value="adjust">Adjustment (pay period)</option>
+          </select>
+          <div style="font-size:11.5px;color:var(--text-3);margin-top:4px">Sales and commission use the amount after discount (no tax, GC or tip). Tips go in <a href="#" onclick="nav('periods');return false" style="color:var(--accent)">Pay Periods</a>.</div>
         </div>
 
         <!-- DISCOUNT -->
@@ -398,59 +414,6 @@ input:-webkit-autofill:focus {
           </div>
         </div>
 
-        <!-- TIP CALCULATOR -->
-        <div style="background:var(--accent-soft);border:1.5px solid #c7d2fe;border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-            <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">💡 Tip Calculator</div>
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;font-size:12.5px;color:var(--text-2)">
-                <input type="checkbox" id="gcIncluded" checked onchange="calcTip()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
-                GC fee ($3.00)
-              </label>
-              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;font-size:12.5px;color:var(--text-2)">
-                <input type="checkbox" id="isCashTip" onchange="onCashTipToggle()" style="width:15px;height:15px;accent-color:#b45309;cursor:pointer">
-                <span>💵 Cash tip</span>
-              </label>
-            </div>
-          </div>
-          <!-- Credit tip calculator (hidden when cash tip) -->
-          <div id="creditTipCalc">
-            <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-              <div class="form-group" style="flex:1;min-width:130px">
-                <label class="form-label" style="color:var(--accent)">Fresha Total Sale (incl. tax &amp; tip)</label>
-                <input class="form-input mono" type="number" id="fTotalSale" placeholder="0.00" min="0" step="0.01"
-                  style="border-color:#c7d2fe;background:white" oninput="calcTip()">
-              </div>
-              <div style="display:flex;flex-direction:column;gap:4px;min-width:110px">
-                <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Breakdown</div>
-                <div id="tipBreakdown" style="font-size:12px;color:var(--text-2);line-height:1.8"></div>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-                <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Tip</div>
-                <div id="tipResult" style="font-size:26px;font-weight:700;color:var(--accent);letter-spacing:-.02em;line-height:1">—</div>
-                <button class="btn btn-accent btn-sm" id="tipApplyBtn" onclick="applyTip()" style="display:none;padding:5px 12px;font-size:12px"></button>
-              </div>
-            </div>
-          </div>
-          <!-- Cash tip input -->
-          <div id="cashTipCalc" style="display:none">
-            <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-              <div class="form-group" style="flex:1;min-width:130px">
-                <label class="form-label" style="color:#b45309">Cash received (total incl. tax)</label>
-                <input class="form-input mono" type="number" id="fCashReceived" placeholder="0.00" min="0" step="0.01"
-                  style="border-color:#fde68a;background:#fffbeb" oninput="calcCashTip()">
-              </div>
-              <div style="display:flex;flex-direction:column;gap:4px;min-width:110px">
-                <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Breakdown</div>
-                <div id="cashTipBreakdown" style="font-size:12px;color:var(--text-2);line-height:1.8"></div>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-                <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Cash Tip</div>
-                <div id="cashTipResult" style="font-size:26px;font-weight:700;color:#b45309;letter-spacing:-.02em;line-height:1">—</div>
-              </div>
-            </div>
-          </div>
-        </div>
         <!-- PRODUCTS -->
         <div style="border:1.5px solid #fde68a;border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:16px;background:#fffbeb">
           <div style="font-size:12px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">🛍️ Products Sold (optional)</div>
@@ -553,7 +516,7 @@ input:-webkit-autofill:focus {
   <!-- ANALYTICS -->
   <div class="page" id="page-analytics">
     <div class="page-header">
-      <div><div class="page-title">Analytics & AI</div><div class="page-sub">Performance insights</div></div>
+      <div><div class="page-title">Analytics</div><div class="page-sub">Performance insights</div></div>
       <div class="page-header-right">
         <div class="month-nav">
           <button class="month-btn" onclick="changeMonth(-1)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
@@ -562,13 +525,9 @@ input:-webkit-autofill:focus {
         </div>
       </div>
     </div>
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab(this,'tab-stats')">📊 Statistics</button>
-      <button class="tab-btn" onclick="switchTab(this,'tab-ai')">✨ AI Analysis</button>
-    </div>
     <div id="tab-stats">
       <div class="card" style="margin-bottom:20px">
-        <div class="card-header"><span class="card-title">💰 Commission Summary</span><span style="font-size:12px;color:var(--text-3)">49.95% (≤$10k) · 55% (>$10k) · Bang 100%</span></div>
+        <div class="card-header"><span class="card-title">💰 Commission Summary</span><span style="font-size:12px;color:var(--text-3)">49.95% (≤$10k/month) · 55% (>$10k/month)</span></div>
         <div class="card-body" style="padding:16px"><div id="commSummary"></div></div>
       </div>
       <div class="card" style="margin-bottom:20px">
@@ -581,13 +540,19 @@ input:-webkit-autofill:focus {
       </div>
       <div class="card"><div class="card-header"><span class="card-title">Monthly Revenue & Commission — last 6 months</span></div><div class="card-body" style="padding:20px"><div class="bar-list" id="monthChart"></div><div id="monthChartLegend"></div></div></div>
     </div>
-    <div id="tab-ai" style="display:none">
-      <div class="ai-panel">
-        <div class="ai-panel-title">✦ AI Performance Analysis</div>
-        <div class="ai-panel-sub">AI analyzes this month's data and provides feedback in Japanese</div>
-        <div class="ai-result" id="aiResult">Press "Analyze" to start. Results will be in Japanese.</div>
-        <button class="btn btn-accent" style="margin-top:20px" onclick="runAI()">✨ Analyze this month</button>
-      </div>
+  </div>
+
+  <!-- PAY PERIODS -->
+  <div class="page" id="page-periods">
+    <div class="page-header">
+      <div><div class="page-title">Pay Periods</div><div class="page-sub">Tips and totals per pay period (1–15 / 16–end of month)</div></div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="padding:0;overflow-x:auto"><table class="tbl" id="periodsTable"></table></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-3);line-height:1.7;margin-top:10px">
+      💳 Card tips = from the pay stub. 💵 Cash tips = what you counted yourself. Tick “?” when you don't know the cash tips.<br>
+      Sales = commission base (after discount, without GC / fees). Commission is an estimate: 49.95%, or 55% when the month is over $10,000.
     </div>
   </div>
 
@@ -598,7 +563,7 @@ input:-webkit-autofill:focus {
     </div>
     <div class="card" style="margin-bottom:16px">
       <div class="card-header"><span class="card-title">Account</span></div>
-      <div class="card-body" style="padding:20px"><div id="accountUI"></div></div>
+      <div class="card-body" style="padding:20px"><div id="accountUI"></div><div style="font-size:11px;color:var(--text-3);margin-top:12px" id="appVersion"></div></div>
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">Service Menu</span></div>
@@ -653,12 +618,13 @@ input:-webkit-autofill:focus {
 
 <!-- MOBILE NAV -->
 <div class="mobile-nav">
-  <div class="mnav-item active" onclick="nav('dashboard')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Home</div>
-  <div class="mnav-item" onclick="nav('add')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</div>
-  <div class="mnav-item" onclick="nav('product')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>Product</div>
-  <div class="mnav-item" onclick="nav('records')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/></svg>History</div>
-  <div class="mnav-item" onclick="nav('customers')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clients</div>
-  <div class="mnav-item" onclick="nav('analytics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Stats</div>
+  <div class="mnav-item active" data-page="dashboard" onclick="nav(\'dashboard\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Home</div>
+  <div class="mnav-item" data-page="add" onclick="nav(\'add\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</div>
+  <div class="mnav-item" data-page="product" onclick="nav(\'product\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>Product</div>
+  <div class="mnav-item" data-page="records" onclick="nav(\'records\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/></svg>History</div>
+  <div class="mnav-item" data-page="customers" onclick="nav(\'customers\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clients</div>
+  <div class="mnav-item" data-page="periods" onclick="nav('periods')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Pay</div>
+  <div class="mnav-item" data-page="analytics" onclick="nav(\'analytics\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>Stats</div>
 </div>
 
 <!-- LOGIN MODAL -->
@@ -707,68 +673,28 @@ input:-webkit-autofill:focus {
         <div class="svc-picker-container" id="eFSvcPicker"></div>
       </div>
 
-      <!-- Amount / Tip / Duration -->
-      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:14px">
+      <!-- Price / Amount / Duration -->
+      <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:12px">
         <div class="form-group">
-          <label class="form-label">Amount ($)</label>
+          <label class="form-label">Before discount ($)</label>
+          <input class="form-input mono" type="number" id="eFListPrice" min="0" step="0.01" oninput="eFListManual=true">
+        </div>
+        <div class="form-group">
+          <label class="form-label">After discount ($)</label>
           <input class="form-input mono" type="number" id="eFAmount" min="0" step="0.01" oninput="onEFAmountEdit()">
           <div id="eFAmountNote" style="display:none;font-size:11px;color:var(--amber);margin-top:3px;font-weight:600">✏️ Custom amount</div>
         </div>
-        <div class="form-group"><label class="form-label" id="eFTipLabel">Tip ($)</label><input class="form-input mono" type="number" id="eFTip" min="0" step="0.01"></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="eFDuration" min="0"></div>
       </div>
-
-      <!-- Tip Calculator -->
-      <div style="background:var(--accent-soft);border:1.5px solid #c7d2fe;border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-          <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em">💡 Tip Calculator</div>
-          <div style="display:flex;gap:12px;flex-wrap:wrap">
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;font-size:12.5px">
-              <input type="checkbox" id="eFGC" checked onchange="calcEFTip()" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
-              GC fee ($3.00)
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;font-size:12.5px">
-              <input type="checkbox" id="eFIsCash" onchange="onEFCashToggle()" style="width:15px;height:15px;accent-color:#b45309;cursor:pointer">
-              <span>💵 Cash tip</span>
-            </label>
-          </div>
-        </div>
-        <!-- Credit calc -->
-        <div id="eFCreditCalc">
-          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-            <div class="form-group" style="flex:1;min-width:130px">
-              <label class="form-label" style="color:var(--accent)">Fresha Total Sale (incl. tax &amp; tip)</label>
-              <input class="form-input mono" type="number" id="eFTotalSale" placeholder="0.00" min="0" step="0.01" style="border-color:#c7d2fe;background:white" oninput="calcEFTip()">
-            </div>
-            <div style="display:flex;flex-direction:column;gap:4px;min-width:100px">
-              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Breakdown</div>
-              <div id="eFTipBreakdown" style="font-size:12px;color:var(--text-2);line-height:1.8"></div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Tip</div>
-              <div id="eFTipResult" style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">—</div>
-            </div>
-          </div>
-        </div>
-        <!-- Cash calc -->
-        <div id="eFCashCalc" style="display:none">
-          <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
-            <div class="form-group" style="flex:1;min-width:130px">
-              <label class="form-label" style="color:#b45309">Cash received (total incl. tax)</label>
-              <input class="form-input mono" type="number" id="eFCashReceived" placeholder="0.00" min="0" step="0.01" style="border-color:#fde68a;background:#fffbeb" oninput="calcEFCashTip()">
-            </div>
-            <div style="display:flex;flex-direction:column;gap:4px;min-width:100px">
-              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Breakdown</div>
-              <div id="eFCashBreakdown" style="font-size:12px;color:var(--text-2);line-height:1.8"></div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-              <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Cash Tip</div>
-              <div id="eFCashResult" style="font-size:24px;font-weight:700;color:#b45309;line-height:1">—</div>
-            </div>
-          </div>
-        </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Type</label>
+        <select class="form-select" id="eFKind" onchange="onKindChange('eF')">
+          <option value="normal">Normal</option>
+          <option value="fulltip">Full tip ($0 sale)</option>
+          <option value="noshow">No-show</option>
+          <option value="adjust">Adjustment (pay period)</option>
+        </select>
       </div>
-
       <!-- Notes -->
       <div class="form-group" style="margin-bottom:14px">
         <label class="form-label">Notes</label>
@@ -854,6 +780,8 @@ let DB = {
   records: [],
   productSales: [],
   products: [],
+  payPeriods: [],
+  schemaVersion: 2,
   services: [
     {name:'Clipper & Scissor Cut',defaultPrice:58,category:'Cut',duration:60},
     {name:'Classic Hair Cut - Short to Long',defaultPrice:78,category:'Cut',duration:60},
@@ -934,6 +862,8 @@ let selectedSvcs = [];
 let apptProducts = [];
 let productOnlyItems = [];
 let amountManualOverride = false; // true when user has manually edited Amount
+let listManual = false;            // true when user has manually edited "Price before discount"
+const APP_VERSION = '2.0 (2026-11-12)';
 
 // ══ FIREBASE SYNC with Email/Password Auth ══
 // Only Tak's own account can read/write (Firebase rules check the uid).
@@ -1025,6 +955,8 @@ function save(){
     productSales: DB.productSales,
     products: DB.products,
     services: DB.services,
+    payPeriods: DB.payPeriods || [],
+    schemaVersion: DB.schemaVersion || 1,
     updatedAt: Date.now()
   };
   localStorage.setItem('stylistDB', JSON.stringify(toSave));
@@ -1088,6 +1020,8 @@ async function pullFromFirebase(retried=false){
       if(remote.productSales) DB.productSales = remote.productSales;
       if(remote.products) DB.products = remote.products;
       if(remote.services && remote.services.length && remote.services[0].category !== undefined) DB.services = remote.services;
+      DB.payPeriods = remote.payPeriods || [];
+      DB.schemaVersion = remote.schemaVersion || 1;
       localStorage.setItem('stylistDB', JSON.stringify({...DB, updatedAt: remoteTime}));
       showSyncStatus('✓ Synced', 'var(--green)');
     } else {
@@ -1118,6 +1052,7 @@ function refreshAllViews(){
     if(id==='customers') renderCustomers();
     if(id==='analytics') renderAnalytics();
     if(id==='settings') renderSettings();
+    if(id==='periods') renderPeriods();
   }
 }
 
@@ -1133,7 +1068,7 @@ async function doLogin(){
     document.getElementById('loginPassword').value='';
     hideLogin();
     toast('Logged in');
-    if(await pullFromFirebase()) refreshAllViews();
+    if(await pullFromFirebase()){ ensureMigrated(); refreshAllViews(); }
   } catch(e){
     const m = e.message||'';
     err.textContent = /INVALID|EMAIL_NOT_FOUND|PASSWORD/.test(m) ? 'Email or password is incorrect.'
@@ -1192,6 +1127,8 @@ function load(){
       if(p.productSales) DB.productSales = p.productSales;
       if(p.products) DB.products = p.products;
       if(p.services && p.services.length && p.services[0].category !== undefined) DB.services = p.services;
+      DB.payPeriods = p.payPeriods || [];
+      DB.schemaVersion = p.schemaVersion || 1;
     }
   } catch(e){}
 }
@@ -1252,12 +1189,12 @@ function changeMonth(d){
 }
 
 // ══ NAV ══
-const PAGES=['dashboard','add','product','records','customers','analytics','settings'];
-const LABELS={dashboard:'Dashboard',add:'Add Appointment',product:'Product Sale',records:'History',customers:'Clients',analytics:'Analytics',settings:'Settings'};
+const PAGES=['dashboard','add','product','records','customers','analytics','settings','periods'];
+const LABELS={dashboard:'Dashboard',add:'Add Appointment',product:'Product Sale',records:'History',customers:'Clients',analytics:'Analytics',settings:'Settings',periods:'Pay Periods'};
 function nav(id){
   PAGES.forEach(p=>document.getElementById('page-'+p).classList.toggle('active',p===id));
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.textContent.trim().startsWith(LABELS[id])));
-  document.querySelectorAll('.mnav-item').forEach((el,i)=>el.classList.toggle('active',i===PAGES.indexOf(id)));
+  document.querySelectorAll('.mnav-item').forEach(el=>el.classList.toggle('active',el.dataset.page===id));
   if(id==='dashboard')renderDashboard();
   if(id==='records')renderRecords();
   if(id==='customers')renderCustomers();
@@ -1265,88 +1202,190 @@ function nav(id){
   if(id==='settings')renderSettings();
   if(id==='add')initForm();
   if(id==='product')initProductForm();
+  if(id==='periods')renderPeriods();
 }
 
 // ══ COMMISSION HELPER ══
 const GC_SVC_NAME = 'GC Green Circle Eco-friendly';
 const BANG_SVC_NAME = 'Bang / Fringe Trim';
 
+// Bang / Fringe Trim was paid 100% as a tip ($0 sale) until the end of Oct 2026.
+// From Nov 2026 it is a normal sale (counts for commission).
+const BANG_FULLTIP_UNTIL = '2026-10-31';
+
 // Services excluded from commission calculation
 const COMMISSION_EXCLUDED = [
   GC_SVC_NAME,
   'Cancelation Fee',
-  'Late Fee',
-  BANG_SVC_NAME  // Bang is treated as tip (100% yours)
+  'Late Fee'
 ];
 
-// Commission rate based on monthly service revenue
-// $0-$10,000 = 49.95%, $10,001+ = 55%
+function round2(n){ return Math.round((+n||0)*100)/100; }
+function recSvcs(r){ return r.services && r.services.length ? r.services : (r.service ? [r.service] : []); }
+// Price used to split one amount across several services (Bang = 0 in the full-tip era)
+function splitPrice(name, date){
+  if(name===BANG_SVC_NAME && (date||'') <= BANG_FULLTIP_UNTIL) return 0;
+  return (DB.services.find(x=>x.name===name)||{}).defaultPrice||0;
+}
+function isExcluded(name, date){
+  if(COMMISSION_EXCLUDED.includes(name)) return true;
+  return name===BANG_SVC_NAME && (date||'') <= BANG_FULLTIP_UNTIL;
+}
+// Commission rate based on MONTHLY service revenue — the whole month at one rate
+// $0-$10,000 = 49.95%, over $10,000 = 55%
 function commissionRate(base) {
   return base <= 10000 ? 0.4995 : 0.55;
 }
-
-// Returns commission amount for a set of records
-function calcCommission(records) {
-  let regularTotal = 0;
-  records.forEach(r => {
-    const svcs = r.services && r.services.length ? r.services : (r.service ? [r.service] : []);
-    const amount = +r.amount || 0;
-    if(!amount) return;
-
-    // Single service — simple case
-    if(svcs.length <= 1) {
-      const svc = svcs[0] || '';
-      if(!COMMISSION_EXCLUDED.includes(svc)) regularTotal += amount;
-      return;
-    }
-
-    // Multi-service — split proportionally by default price
-    const prices = svcs.map(s => (DB.services.find(x=>x.name===s)||{}).defaultPrice||0);
-    const priceSum = prices.reduce((a,b)=>a+b,0) || 1;
-    svcs.forEach((s, i) => {
-      if(!COMMISSION_EXCLUDED.includes(s)){
-        regularTotal += amount * (prices[i] / priceSum);
-      }
-    });
-  });
-  return regularTotal * commissionRate(regularTotal);
-}
-
-// Returns Bang / Fringe Trim total (counted as tips)
-function bangTotal(records) {
-  return records.reduce((s, r) => {
-    const svcs = r.services || [r.service];
-    if(!svcs.includes(BANG_SVC_NAME)) return s;
-    const prices = svcs.map(n => (DB.services.find(x=>x.name===n)||{}).defaultPrice||0);
-    const total = prices.reduce((a,b)=>a+b,0)||1;
-    const bangIdx = svcs.indexOf(BANG_SVC_NAME);
-    const share = (+r.amount||0) * (prices[bangIdx]/total);
-    return s + share;
-  }, 0);
-}
-
-// Returns commission-eligible revenue (excludes GC, Cancelation, Late fees, Bang)
+// Commission-eligible revenue (after discount; excludes GC, fees, Bang in full-tip era)
 function commissionBase(records) {
   let total = 0;
   records.forEach(r => {
-    const svcs = r.services && r.services.length ? r.services : (r.service ? [r.service] : []);
+    const svcs = recSvcs(r);
     const amount = +r.amount || 0;
     if(!amount) return;
     if(svcs.length <= 1){
-      if(!COMMISSION_EXCLUDED.includes(svcs[0]||'')) total += amount;
+      if(!isExcluded(svcs[0]||'', r.date)) total += amount;
       return;
     }
-    const prices = svcs.map(s=>(DB.services.find(x=>x.name===s)||{}).defaultPrice||0);
-    const priceSum = prices.reduce((a,b)=>a+b,0)||1;
-    svcs.forEach((s,i)=>{
-      if(!COMMISSION_EXCLUDED.includes(s)) total += amount*(prices[i]/priceSum);
-    });
+    const prices = svcs.map(s=>splitPrice(s, r.date));
+    const priceSum = prices.reduce((a,b)=>a+b,0);
+    if(!priceSum){ if(!svcs.every(s=>isExcluded(s, r.date))) total += amount; return; }
+    svcs.forEach((s,i)=>{ if(!isExcluded(s, r.date)) total += amount*(prices[i]/priceSum); });
   });
   return total;
 }
-
+function calcCommission(records) {
+  const base = commissionBase(records);
+  return base * commissionRate(base);
+}
 function gcCount(records) {
   return records.filter(r => r.service === GC_SVC_NAME).length;
+}
+// Clients served: normal + full-tip. No-shows and adjustment rows are not counted.
+function isServed(r){ return !r.kind || r.kind==='normal' || r.kind==='fulltip'; }
+function kindBadge(r){
+  if(r.kind==='fulltip') return '<span class="badge" style="background:#dcfce7;color:var(--green);font-size:10.5px">Full tip</span>';
+  if(r.kind==='noshow')  return '<span class="badge" style="background:#fee2e2;color:var(--red);font-size:10.5px">No-show</span>';
+  if(r.kind==='adjust')  return '<span class="badge" style="background:#e0e7ff;color:var(--accent);font-size:10.5px">Adjustment</span>';
+  return '';
+}
+
+// ══ PAY PERIODS ══
+function periodKey(date){ const [y,m,d]=date.split('-'); return `${y}-${m}-${+d<=15?'01':'16'}`; }
+function periodEnd(key){
+  const [y,m,d]=key.split('-').map(Number);
+  if(d===1) return `${key.slice(0,8)}15`;
+  const last=new Date(y, m, 0).getDate();
+  return `${key.slice(0,8)}${String(last).padStart(2,'0')}`;
+}
+function nextPeriodKey(key){
+  const [y,m,d]=key.split('-').map(Number);
+  if(d===1) return `${key.slice(0,8)}16`;
+  const ny = m===12 ? y+1 : y, nm = m===12 ? 1 : m+1;
+  return `${ny}-${String(nm).padStart(2,'0')}-01`;
+}
+function findPeriod(key){ return (DB.payPeriods||[]).find(p=>p.start===key); }
+function getOrCreatePeriod(key){
+  if(!DB.payPeriods) DB.payPeriods=[];
+  let p=findPeriod(key);
+  if(!p){ p={start:key, end:periodEnd(key), cardTips:null, cashTips:null, cashUnknown:false, note:''}; DB.payPeriods.push(p); DB.payPeriods.sort((a,b)=>a.start.localeCompare(b.start)); }
+  return p;
+}
+function periodRecords(key){ const end=periodEnd(key); return DB.records.filter(r=>r.date && r.date>=key && r.date<=end); }
+function monthKey(date){ return date.slice(0,7); }
+function monthBaseOf(ym){ return commissionBase(DB.records.filter(r=>r.date && r.date.startsWith(ym))); }
+// Tips for a calendar month = the two pay periods of that month
+function monthTips(year, month){
+  const ym=`${year}-${String(month+1).padStart(2,'0')}`;
+  let card=0, cash=0, missing=0;
+  [`${ym}-01`,`${ym}-16`].forEach(k=>{
+    const p=findPeriod(k);
+    if(p && p.cardTips!=null) card+=+p.cardTips; else if(periodRecords(k).length) missing++;
+    if(p && p.cashTips!=null) cash+=+p.cashTips;
+  });
+  return {card, cash, total:card+cash, missing};
+}
+function allPeriodKeys(){
+  const starts=[...DB.records.filter(r=>r.date).map(r=>periodKey(r.date)), ...(DB.payPeriods||[]).map(p=>p.start)].sort();
+  if(!starts.length) return [];
+  const last=periodKey(todayStr());
+  const out=[]; let k=starts[0]; let guard=0;
+  while(k<=last && guard++<600){ out.push(k); k=nextPeriodKey(k); }
+  return out;
+}
+function setPeriodVal(key, field, val){
+  const p=getOrCreatePeriod(key);
+  if(field==='cashUnknown'){ p.cashUnknown=!!val; if(val) p.cashTips=null; }
+  else if(field==='note'){ p.note=String(val||'').trim(); }
+  else { const v=String(val).trim(); p[field]= v==='' ? null : round2(parseFloat(v)); if(field==='cashTips' && v!=='') p.cashUnknown=false; }
+  save(); renderPeriods();
+}
+function renderPeriods(){
+  const tbl=document.getElementById('periodsTable'); if(!tbl) return;
+  const keys=allPeriodKeys().reverse();
+  if(!keys.length){ tbl.innerHTML='<tbody><tr class="tbl-empty"><td>No data yet</td></tr></tbody>'; return; }
+  const inp='class="form-input mono" style="width:88px;padding:5px 7px;font-size:13px"';
+  tbl.innerHTML=`<thead><tr><th>Period</th><th>Clients</th><th>Sales</th><th>Est. comm.</th><th>💳 Card tips</th><th>💵 Cash tips</th><th>Tip %</th><th>Note</th></tr></thead><tbody>`+
+  keys.map(k=>{
+    const recs=periodRecords(k), p=findPeriod(k)||{};
+    const base=commissionBase(recs), rate=commissionRate(monthBaseOf(k.slice(0,7)));
+    const served=recs.filter(isServed).length;
+    const tipPct = (p.cardTips!=null && base) ? (p.cardTips/base*100).toFixed(1)+'%' : '—';
+    const label=`${fmtDate(k)} – ${fmtDate(periodEnd(k)).replace(/^\w+ /,'')}, ${k.slice(0,4)}`;
+    return `<tr>
+      <td style="white-space:nowrap;font-weight:600;font-size:12.5px">${label}</td>
+      <td class="mono">${served||'—'}</td>
+      <td class="mono">${base?'$'+fmt(base):'—'}</td>
+      <td class="mono" style="color:var(--accent)">${base?'$'+fmt(base*rate):'—'}${rate>0.5?' <span style="font-size:10px">55%</span>':''}</td>
+      <td><input ${inp} type="number" step="0.01" value="${p.cardTips??''}" onchange="setPeriodVal('${k}','cardTips',this.value)"></td>
+      <td style="white-space:nowrap"><input ${inp} type="number" step="0.01" value="${p.cashTips??''}" ${p.cashUnknown?'disabled':''} onchange="setPeriodVal('${k}','cashTips',this.value)">
+        <label style="font-size:11px;color:var(--text-3);margin-left:4px;cursor:pointer"><input type="checkbox" ${p.cashUnknown?'checked':''} onchange="setPeriodVal('${k}','cashUnknown',this.checked)"> ?</label></td>
+      <td class="mono" style="font-size:12px">${tipPct}</td>
+      <td><input class="form-input" style="min-width:120px;padding:5px 7px;font-size:12.5px" value="${(p.note||'').replace(/"/g,'&quot;')}" onchange="setPeriodVal('${k}','note',this.value)"></td>
+    </tr>`;
+  }).join('')+'</tbody>';
+}
+
+// ══ MIGRATION v1 → v2 (runs once) ══
+// - per-appointment tips → pay-period totals (card / cash)
+// - Bang in the full-tip era → $0 sale ("Full tip"), its share removed from multi-service amounts
+// - adds listPrice (price before discount) to every record
+function migrateV2(){
+  if((DB.schemaVersion||1) >= 2) return false;
+  try { localStorage.setItem('stylistDB_beforeV2', JSON.stringify(DB)); } catch(e){}
+  const per={};
+  (DB.records||[]).forEach(r=>{
+    const t=+r.tip||0;
+    if(t && r.date){
+      const k=periodKey(r.date); per[k]=per[k]||{card:0,cash:0};
+      if(r.tipType==='cash') per[k].cash+=t; else per[k].card+=t;
+    }
+    const svcs=recSvcs(r), amount=+r.amount||0;
+    if(svcs.includes(BANG_SVC_NAME) && (r.date||'') <= BANG_FULLTIP_UNTIL){
+      if(svcs.length===1){
+        r.listPrice = amount || ((DB.services.find(x=>x.name===BANG_SVC_NAME)||{}).defaultPrice||0);
+        r.amount = 0; r.kind='fulltip';
+      } else if(amount){
+        const prices=svcs.map(n=>(DB.services.find(x=>x.name===n)||{}).defaultPrice||0);
+        const sum=prices.reduce((a,b)=>a+b,0)||1;
+        r.amount = round2(amount - amount*prices[svcs.indexOf(BANG_SVC_NAME)]/sum);
+      }
+    }
+    if(r.listPrice==null) r.listPrice = +r.amount||0;
+    delete r.tip; delete r.tipType;
+  });
+  DB.payPeriods = DB.payPeriods || [];
+  Object.entries(per).forEach(([k,v])=>{
+    const p=getOrCreatePeriod(k);
+    p.recordTips={card:round2(v.card), cash:round2(v.cash)};   // what the old per-client tips added up to
+    if(p.cardTips==null && v.card) p.cardTips=round2(v.card);
+    if(p.cashTips==null && v.cash) p.cashTips=round2(v.cash);
+  });
+  DB.schemaVersion=2;
+  return true;
+}
+function ensureMigrated(){
+  if(migrateV2()){ save(); refreshAllViews(); toast('✓ Data updated to the new format'); }
 }
 
 // ══ DASHBOARD ══
@@ -1354,13 +1393,11 @@ function renderDashboard(){
   updateMonthLabels();
   const today=todayStr(), mr=monthRecords(), tr=DB.records.filter(r=>r.date===today);
   const mSales=mr.reduce((s,r)=>s+(+r.amount||0),0);
-  const mTips=mr.reduce((s,r)=>s+(+r.tip||0),0);
-  const mBang=bangTotal(mr);
-  const mCreditTips=mr.filter(r=>r.tipType!=='cash').reduce((s,r)=>s+(+r.tip||0),0);
-  const mCashTips=mr.filter(r=>r.tipType==='cash').reduce((s,r)=>s+(+r.tip||0),0);
-  const mTipsTotal = mTips + mBang; // Tips + Bang
-  const mCount=mr.length, mAvg=mCount?mSales/mCount:0;
-  const tSales=tr.reduce((s,r)=>s+(+r.amount||0),0), tCount=tr.length;
+  const mt=monthTips(currentYear,currentMonth);
+  const served=mr.filter(isServed), normal=mr.filter(r=>!r.kind||r.kind==='normal');
+  const mFull=mr.filter(r=>r.kind==='fulltip').length, mNoShow=mr.filter(r=>r.kind==='noshow').length;
+  const mCount=served.length, mAvg=normal.length?normal.reduce((s,r)=>s+(+r.amount||0),0)/normal.length:0;
+  const tSales=tr.reduce((s,r)=>s+(+r.amount||0),0), tCount=tr.filter(isServed).length;
   let pm=currentMonth-1,py=currentYear; if(pm<0){pm=11;py--;}
   const pmr=DB.records.filter(r=>{
     if(!r.date) return false;
@@ -1380,13 +1417,13 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Monthly Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(mSales)}</div>
       <div class="stat-delta ${diff===null?'':diff>=0?'d-up':'d-down'}">${diff===null?'No prev. data':(diff>=0?'↑ ':'↓ ')+Math.abs(diff).toFixed(1)+'% vs last month'}</div></div>
     <div class="stat-card" style="border-color:#a5b4fc;background:linear-gradient(135deg,#eef2ff,#fff)">
-      <div class="stat-label" style="color:var(--accent)">My Commission <span style="font-weight:400;opacity:.7">(49.5%)</span></div>
+      <div class="stat-label" style="color:var(--accent)">My Commission <span style="font-weight:400;opacity:.7">(${mCommBase>10000?'55':'49.95'}%)</span></div>
       <div class="stat-value" style="color:var(--accent)"><sup style="color:var(--accent)">$</sup>${Math.round(mComm)}</div>
       <div class="stat-delta ${commDiff===null?'':commDiff>=0?'d-up':'d-down'}">${commDiff===null?`Base: $${fmt(mCommBase)}`:(commDiff>=0?'↑ ':'↓ ')+Math.abs(commDiff).toFixed(1)+'% vs last month'}</div></div>
-    <div class="stat-card"><div class="stat-label">Tips + Bang</div><div class="stat-value"><sup>$</sup>${Math.round(mTipsTotal)}</div>
-      <div class="stat-delta">💳 $${fmt(mCreditTips)}${mCashTips?` · 💵 $${fmt(mCashTips)}`:''}${mBang?` · ✂️ $${fmt(mBang)}`:''}</div></div>
+    <div class="stat-card" onclick="nav('periods')" style="cursor:pointer"><div class="stat-label">Tips</div><div class="stat-value"><sup>$</sup>${Math.round(mt.total)}</div>
+      <div class="stat-delta">💳 $${fmt(mt.card)}${mt.cash?` · 💵 $${fmt(mt.cash)}`:''}${mt.missing?` · <span style="color:var(--amber)">${mt.missing} period${mt.missing>1?'s':''} missing</span>`:''}</div></div>
     <div class="stat-card"><div class="stat-label">Clients Served</div><div class="stat-value">${mCount}</div>
-      <div class="stat-delta">this month</div></div>
+      <div class="stat-delta">${mFull||mNoShow?`${mFull?mFull+' full tip':''}${mFull&&mNoShow?' · ':''}${mNoShow?mNoShow+' no-show (not counted)':''}`:'this month'}</div></div>
     <div class="stat-card"><div class="stat-label">Avg. per Client</div><div class="stat-value"><sup>$</sup>${Math.round(mAvg)}</div>
       <div class="stat-delta">per appointment</div></div>
     <div class="stat-card"><div class="stat-label">Today's Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(tSales)}</div>
@@ -1400,7 +1437,7 @@ function renderDashboard(){
       <td style="font-weight:600">${r.client}</td>
       <td>${r.service.split(' + ').map(s=>`<span class="badge badge-${svcCat(s)}" style="font-size:11px;margin-right:3px">${s}</span>`).join('')}</td>
       <td class="mono" style="font-weight:600">$${fmt(r.amount)}</td>
-      <td class="mono" style="color:var(--green)">${r.tip?'$'+fmt(r.tip):'—'}</td>
+      <td class="mono" style="color:var(--text-3)">${(r.listPrice!=null && +r.listPrice!==+r.amount)?'<s>$'+fmt(r.listPrice)+'</s>':'—'} ${kindBadge(r)}</td>
       <td style="color:var(--text-3);font-size:12px">${r.time||'—'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;margin-right:4px" onclick="openEdit('${r.id}')">✏️</button>
@@ -1440,6 +1477,7 @@ function toggleSvc(name){
   const idx=selectedSvcs.indexOf(name);
   if(idx>=0) selectedSvcs.splice(idx,1);
   else selectedSvcs.push(name);
+  listManual=false;
   updateSvcChips();
   buildPicker(document.getElementById('svcSearch').value);
 }
@@ -1591,54 +1629,53 @@ function initForm(){
   buildPicker();
 }
 
+function onKindChange(prefix){
+  const kind=document.getElementById(prefix+'Kind').value;
+  if(kind==='fulltip' || kind==='noshow') document.getElementById(prefix+'Amount').value=0;
+}
+
 function saveRecord(){
   const date=document.getElementById('fDate').value;
-  const client=document.getElementById('fClient').value.trim();
-  const amount=parseFloat(document.getElementById('fAmount').value)||0;
-  const tip=parseFloat(document.getElementById('fTip').value)||0;
+  const kind=document.getElementById('fKind').value;
+  let client=document.getElementById('fClient').value.trim();
+  const amount=round2(parseFloat(document.getElementById('fAmount').value)||0);
+  const lpRaw=document.getElementById('fListPrice').value;
+  const listPrice=lpRaw===''?amount:round2(parseFloat(lpRaw)||0);
   const duration=parseInt(document.getElementById('fDuration').value)||0;
   const note=document.getElementById('fNote').value.trim();
-  if(!date||!client||!selectedSvcs.length){ toast('⚠️ Fill in Date, Client and select at least one Service'); return; }
-  const tipType = document.getElementById('isCashTip').checked ? 'cash' : 'credit';
+  if(kind==='adjust' && !client) client='(調整)';
+  if(!date||!client||(!selectedSvcs.length && kind!=='adjust')){ toast('⚠️ Fill in Date, Client and select at least one Service'); return; }
   // Remember this date for next entry
   lastUsedDate = date;
   // Capture product names from live inputs
   const apptProdInputs = document.getElementById('apptProductList').querySelectorAll('input[placeholder="Product name"]');
   apptProdInputs.forEach((inp,i)=>{ if(apptProducts[i]) apptProducts[i].name=inp.value; });
-  // Save as combined service string (comma-separated) for display, store array too
-  const serviceLabel = selectedSvcs.join(' + ');
-  DB.records.push({
+  const serviceLabel = selectedSvcs.length ? selectedSvcs.join(' + ') : 'Adjustment';
+  const rec = {
     id:Date.now().toString(), date, client,
     service: serviceLabel,
     services: [...selectedSvcs],
     products: apptProducts.length ? [...apptProducts] : [],
-    amount, tip, tipType, duration, note,
+    amount, listPrice, duration, note, source:'manual',
     time:new Date().toTimeString().slice(0,5)
-  });
+  };
+  if(kind!=='normal') rec.kind=kind;
+  DB.records.push(rec);
   autoAddToProductMenu(apptProducts);
   save(); toast('✓ Appointment saved!'); clearForm();
 }
 
 function clearForm(){
-  ['fClient','fAmount','fTip','fDuration','fNote','fTotalSale'].forEach(id=>document.getElementById(id).value='');
+  ['fClient','fAmount','fListPrice','fDuration','fNote'].forEach(id=>document.getElementById(id).value='');
   // Keep the last used date (don't reset to today)
   document.getElementById('fDate').value = getFormDate();
-  document.getElementById('gcIncluded').checked=true;
-  document.getElementById('isCashTip').checked=false;
-  document.getElementById('creditTipCalc').style.display='';
-  document.getElementById('cashTipCalc').style.display='none';
-  document.getElementById('tipFieldLabel').innerHTML='Tip (CAD $)';
-  document.getElementById('fCashReceived').value='';
+  document.getElementById('fKind').value='normal';
   document.getElementById('discStudent').checked=false;
   document.getElementById('discResidence').checked=false;
   document.getElementById('discResult').style.display='none';
   document.getElementById('discResetWrap').style.display='none';
   document.getElementById('amountOverrideNote').style.display='none';
-  amountManualOverride=false;
-  document.getElementById('tipResult').textContent='—';
-  document.getElementById('tipBreakdown').innerHTML='';
-  document.getElementById('tipApplyBtn').style.display='none';
-  lastCalcTip=null;
+  amountManualOverride=false; listManual=false;
   apptProducts=[];
   if(document.getElementById('apptProductList')) renderApptProducts();
   selectedSvcs=[];
@@ -1698,30 +1735,19 @@ function openEdit(id){
 
   document.getElementById('eFDate').value     = r.date||'';
   document.getElementById('eFClient').value   = r.client||'';
-  document.getElementById('eFAmount').value   = r.amount||'';
-  document.getElementById('eFTip').value      = r.tip||'';
-  document.getElementById('eFDuration').value = r.duration||'';
   document.getElementById('eFNote').value     = r.note||'';
-  document.getElementById('eFTotalSale').value= '';
-  document.getElementById('eFTipResult').textContent = '—';
-  document.getElementById('eFTipBreakdown').innerHTML = '';
-  document.getElementById('eFGC').checked = true;
+  document.getElementById('eFKind').value     = r.kind||'normal';
   document.getElementById('eFAmountNote').style.display='none';
-
-  // Restore cash/credit tip state
-  const isCash = r.tipType === 'cash';
-  document.getElementById('eFIsCash').checked = isCash;
-  document.getElementById('eFCreditCalc').style.display = isCash ? 'none' : '';
-  document.getElementById('eFCashCalc').style.display   = isCash ? '' : 'none';
-  document.getElementById('eFTipLabel').innerHTML = isCash ? 'Cash Tip ($) 💵' : 'Tip ($)';
-  document.getElementById('eFCashReceived').value = '';
-  document.getElementById('eFCashBreakdown').innerHTML = '';
-  document.getElementById('eFCashResult').textContent = '—';
+  eFListManual = true; // keep the saved price unless services change
 
   // Load services
   eFSvcs = r.services ? [...r.services] : (r.service ? r.service.split(' + ') : []);
   buildEFPicker();
   updateEFSvcChips();
+  // Show the saved values (not the menu defaults)
+  document.getElementById('eFAmount').value    = r.amount ?? '';
+  document.getElementById('eFListPrice').value = r.listPrice ?? r.amount ?? '';
+  document.getElementById('eFDuration').value  = r.duration||'';
 
   // Load products
   eFProducts = (r.products||[]).map(p=>({...p}));
@@ -1765,6 +1791,7 @@ function filterEFSvc(v){ buildEFPicker(v); }
 function toggleEFSvc(name){
   const idx=eFSvcs.indexOf(name);
   if(idx>=0) eFSvcs.splice(idx,1); else eFSvcs.push(name);
+  eFListManual=false;
   updateEFSvcChips();
   buildEFPicker(document.getElementById('eFSvcSearch').value);
 }
@@ -1789,73 +1816,18 @@ function updateEFSvcChips(){
   }
 }
 
-function onEFCashToggle(){
-  const isCash = document.getElementById('eFIsCash').checked;
-  document.getElementById('eFCreditCalc').style.display = isCash ? 'none' : '';
-  document.getElementById('eFCashCalc').style.display   = isCash ? '' : 'none';
-  document.getElementById('eFTipLabel').innerHTML = isCash ? 'Cash Tip ($) 💵' : 'Tip ($)';
-  if(isCash){
-    document.getElementById('eFTotalSale').value='';
-    document.getElementById('eFTipBreakdown').innerHTML='';
-    document.getElementById('eFTipResult').textContent='—';
-    document.getElementById('eFCashReceived').value='';
-    document.getElementById('eFCashBreakdown').innerHTML='';
-    document.getElementById('eFCashResult').textContent='—';
-    document.getElementById('eFTip').value='';
-  } else {
-    document.getElementById('eFCashReceived').value='';
-    document.getElementById('eFCashBreakdown').innerHTML='';
-    document.getElementById('eFCashResult').textContent='—';
-    calcEFTip();
-  }
-}
-
-function calcEFCashTip(){
-  const cashReceived = parseFloat(document.getElementById('eFCashReceived').value)||0;
-  const amount       = parseFloat(document.getElementById('eFAmount').value)||0;
-  const gcOn         = document.getElementById('eFGC').checked;
-  const result       = document.getElementById('eFCashResult');
-  const breakdown    = document.getElementById('eFCashBreakdown');
-  if(!cashReceived||!amount){ breakdown.innerHTML='<span style="color:var(--text-3)">Enter cash received &amp; Amount</span>'; result.textContent='—'; return; }
-  const tax=amount*0.05, gc=gcOn?3:0, subtotal=amount+tax+gc;
-  const tip=cashReceived-subtotal;
-  breakdown.innerHTML=`Service: $${amount.toFixed(2)}<br>GST (5%): $${tax.toFixed(2)}<br>${gcOn?`GC: $3.00<br>`:''}Subtotal: $${subtotal.toFixed(2)}`;
-  if(tip>=0){
-    result.textContent=`$${tip.toFixed(2)}`; result.style.color='#b45309';
-    document.getElementById('eFTip').value=tip.toFixed(2);
-  } else {
-    result.textContent='?'; result.style.color='var(--red)';
-    document.getElementById('eFTip').value='';
-  }
-}
-
+let eFListManual = false;
 function onEFAmountEdit(){
   eFAmountOverride=true;
   document.getElementById('eFAmountNote').style.display='';
-  calcEFTip();
 }
-
-// ── Edit Modal Tip Calculator ──
+// (was the Total Sale tip calculator) keeps "before discount" in sync with the services
 function calcEFTip(){
-  const totalSale=parseFloat(document.getElementById('eFTotalSale').value)||0;
-  const amount=parseFloat(document.getElementById('eFAmount').value)||0;
-  const gcOn=document.getElementById('eFGC').checked;
-  const result=document.getElementById('eFTipResult');
-  const breakdown=document.getElementById('eFTipBreakdown');
-  if(!totalSale||!amount){ breakdown.innerHTML='<span style="color:var(--text-3)">Enter Total Sale &amp; Amount</span>'; result.textContent='—'; return; }
-  const tax=amount*0.05;
-  const gc=gcOn?3:0;
-  const subtotal=amount+tax+gc;
-  const tip=totalSale-subtotal;
-  breakdown.innerHTML=`Service: $${amount.toFixed(2)}<br>GST (5%): $${tax.toFixed(2)}<br>${gcOn?`GC: $3.00<br>`:''}Subtotal: $${subtotal.toFixed(2)}`;
-  if(tip>=0){
-    result.textContent=`$${tip.toFixed(2)}`;
-    result.style.color='var(--accent)';
-    document.getElementById('eFTip').value=tip.toFixed(2);
-  } else {
-    result.textContent='?'; result.style.color='var(--red)';
-    document.getElementById('eFTip').value='';
+  if(!eFListManual){
+    document.getElementById('eFListPrice').value = eFSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
   }
+  const k=document.getElementById('eFKind').value;
+  if(k==='fulltip'||k==='noshow') document.getElementById('eFAmount').value=0;
 }
 
 function saveEdit(){
@@ -1868,9 +1840,13 @@ function saveEdit(){
   r.client   = document.getElementById('eFClient').value.trim();
   r.services = [...eFSvcs];
   r.service  = eFSvcs.join(' + ');
-  r.amount   = parseFloat(document.getElementById('eFAmount').value)||0;
-  r.tip      = parseFloat(document.getElementById('eFTip').value)||0;
-  r.tipType  = document.getElementById('eFIsCash').checked ? 'cash' : 'credit';
+  r.amount   = round2(parseFloat(document.getElementById('eFAmount').value)||0);
+  const lp   = document.getElementById('eFListPrice').value;
+  r.listPrice= lp==='' ? r.amount : round2(parseFloat(lp)||0);
+  const kind = document.getElementById('eFKind').value;
+  if(kind==='normal') delete r.kind; else r.kind = kind;
+  if(!r.services.length) r.service = 'Adjustment';
+  delete r.tip; delete r.tipType;
   r.duration = parseInt(document.getElementById('eFDuration').value)||0;
   r.note     = document.getElementById('eFNote').value.trim();
   r.products = [...eFProducts];
@@ -1892,8 +1868,7 @@ function renderRecords(){
   updateMonthLabels();
   const mr=monthRecords().sort((a,b)=>b.date.localeCompare(a.date));
   const total=mr.reduce((s,r)=>s+(+r.amount||0),0);
-  const tips=mr.reduce((s,r)=>s+(+r.tip||0),0);
-  document.getElementById('recordsSub').textContent=mr.length?`${mr.length} appointments · $${fmt(total)} revenue · $${fmt(tips)} tips`:'No records this month';
+  document.getElementById('recordsSub').textContent=mr.length?`${mr.filter(isServed).length} clients · $${fmt(total)} revenue`:'No records this month';
 
   const list=document.getElementById('recordsList');
   if(!mr.length){
@@ -1908,7 +1883,6 @@ function renderRecords(){
   list.innerHTML=Object.entries(byDate).map(([date,recs])=>{
     // Daily summary
     const dayAmt = recs.reduce((s,r)=>s+(+r.amount||0),0);
-    const dayTips = recs.reduce((s,r)=>s+(+r.tip||0),0);
     const dayProds = recs.reduce((s,r)=>s+(r.products?.length||0),0);
     // Also add product-only sales for this date
     const dayPS = (DB.productSales||[]).filter(ps=>ps.date===date);
@@ -1920,9 +1894,8 @@ function renderRecords(){
           ${new Date(date+'T12:00:00').toLocaleDateString('en-CA',{timeZone:'America/Vancouver',weekday:'long',month:'long',day:'numeric'})}
         </div>
         <div style="display:flex;gap:8px;font-size:11.5px;font-weight:600;flex-wrap:wrap">
-          <span style="color:var(--text-2)">${recs.length} client${recs.length!==1?'s':''}</span>
+          <span style="color:var(--text-2)">${recs.filter(isServed).length} client${recs.filter(isServed).length!==1?'s':''}</span>
           <span style="color:var(--accent)">$${fmt(dayAmt)}</span>
-          ${dayTips?`<span style="color:var(--green)">+$${fmt(dayTips)} tip</span>`:''}
           ${dayProds+dayPS.length?`<span style="color:var(--amber)">🛍️ ${dayProds+dayPS.reduce((s,ps)=>s+(ps.products?.length||0),0)} items</span>`:''}
           ${dayPSTotal?`<span style="color:var(--amber)">$${fmt(dayPSTotal)} products</span>`:''}
         </div>
@@ -1946,7 +1919,8 @@ function renderRecords(){
             </div>
             <div style="text-align:right;flex-shrink:0">
               <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">$${fmt(r.amount)}</div>
-              ${r.tip?`<div style="font-size:12px;color:var(--green);font-weight:600">${r.tipType==='cash'?'💵':'💳'}+$${fmt(r.tip)} tip</div>`:''}
+              ${(r.listPrice!=null && +r.listPrice!==+r.amount)?`<div style="font-size:12px;color:var(--text-3)"><s>$${fmt(r.listPrice)}</s></div>`:''}
+              ${kindBadge(r)}
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
@@ -2039,7 +2013,7 @@ function renderCustomers(){
 }
 function showClient(name){
   const recs=DB.records.filter(r=>r.client===name).sort((a,b)=>b.date.localeCompare(a.date));
-  const total=recs.reduce((s,r)=>s+(+r.amount||0),0), tips=recs.reduce((s,r)=>s+(+r.tip||0),0);
+  const total=recs.reduce((s,r)=>s+(+r.amount||0),0);
   const svcMap={}; recs.forEach(r=>svcMap[r.service]=(svcMap[r.service]||0)+1);
   const topSvcs=Object.entries(svcMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
   // Product history from appointments + standalone sales
@@ -2065,10 +2039,9 @@ function showClient(name){
 
   document.getElementById('modalTitle').textContent=name;
   document.getElementById('modalBody').innerHTML=`
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Visits</div><div class="stat-value">${recs.length}</div></div>
+    <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px">
+      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Visits</div><div class="stat-value">${recs.filter(isServed).length}</div></div>
       <div class="stat-card" style="box-shadow:none"><div class="stat-label">Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(total)}</div></div>
-      <div class="stat-card" style="box-shadow:none"><div class="stat-label">Tips</div><div class="stat-value"><sup>$</sup>${Math.round(tips)}</div></div>
     </div>
     <div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Top Services</div>
@@ -2095,11 +2068,7 @@ function renderAnalytics(){
   // Commission summary card
   const mCommBase = commissionBase(mr);
   const mComm = calcCommission(mr);
-  const mTips = mr.reduce((s,r)=>s+(+r.tip||0),0);
-  const mBangAmt = bangTotal(mr);
-  const mCreditTips = mr.filter(r=>r.tipType!=='cash').reduce((s,r)=>s+(+r.tip||0),0);
-  const mCashTips   = mr.filter(r=>r.tipType==='cash').reduce((s,r)=>s+(+r.tip||0),0);
-  const mTipsTotal  = mTips + mBangAmt;
+  const mt = monthTips(currentYear, currentMonth);
   const gcRecs = mr.filter(r=>r.service===GC_SVC_NAME).length;
   document.getElementById('commSummary').innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
@@ -2114,13 +2083,13 @@ function renderAnalytics(){
         <div class="stat-delta">this month</div>
       </div>
       <div class="stat-card" style="box-shadow:none">
-        <div class="stat-label">Tips + Bang</div>
-        <div class="stat-value" style="font-size:22px"><sup style="font-size:12px;color:var(--text-2)">$</sup>${fmt(mTipsTotal)}</div>
-        <div class="stat-delta">💳 $${fmt(mCreditTips)}${mCashTips?`<br>💵 Cash: $${fmt(mCashTips)}`:''}${mBangAmt?`<br>✂️ Bang: $${fmt(mBangAmt)}`:''}</div>
+        <div class="stat-label">Tips</div>
+        <div class="stat-value" style="font-size:22px"><sup style="font-size:12px;color:var(--text-2)">$</sup>${fmt(mt.total)}</div>
+        <div class="stat-delta">💳 $${fmt(mt.card)}${mt.cash?`<br>💵 Cash: $${fmt(mt.cash)}`:''}${mt.missing?`<br><span style="color:var(--amber)">${mt.missing} period(s) missing</span>`:''}</div>
       </div>
       <div class="stat-card" style="box-shadow:none;background:#f0fdf4;border-color:#6ee7b7">
-        <div class="stat-label" style="color:var(--green)">Commission + Tips + Bang</div>
-        <div class="stat-value" style="font-size:22px;color:var(--green)"><sup style="font-size:12px">$</sup>${fmt(mComm+mTipsTotal)}</div>
+        <div class="stat-label" style="color:var(--green)">Commission + Tips</div>
+        <div class="stat-value" style="font-size:22px;color:var(--green)"><sup style="font-size:12px">$</sup>${fmt(mComm+mt.total)}</div>
         <div class="stat-delta">total take-home</div>
       </div>
     </div>
@@ -2134,7 +2103,7 @@ function renderAnalytics(){
     const svcs = r.services && r.services.length ? r.services : (r.service ? r.service.split(' + ') : []);
     if(svcs.length === 0) return;
     // Distribute amount proportionally across services
-    const prices = svcs.map(n=>(DB.services.find(x=>x.name===n)||{}).defaultPrice||0);
+    const prices = svcs.map(n=>splitPrice(n, r.date));
     const total = prices.reduce((a,b)=>a+b,0)||1;
     svcs.forEach((name,i)=>{
       const cat = svcEffectiveCat(name);
@@ -2148,7 +2117,7 @@ function renderAnalytics(){
   `).join('')||'<p style="color:var(--text-3);font-size:13px">No data this month</p>';
 
   const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const wday={}; mr.forEach(r=>{ const d=DAYS[new Date(r.date+'T12:00:00').getDay()]; wday[d]=(wday[d]||0)+1; });
+  const wday={}; mr.filter(isServed).forEach(r=>{ const d=DAYS[new Date(r.date+'T12:00:00').getDay()]; wday[d]=(wday[d]||0)+1; });
   const maxW=Math.max(...Object.values(wday),1);
   document.getElementById('weekdayChart').innerHTML=DAYS.filter(d=>wday[d]).map(d=>`
     <div class="bar-row"><div class="bar-label">${d}</div><div class="bar-track"><div class="bar-fill" style="width:${wday[d]/maxW*100}%">${wday[d]}</div></div><div class="bar-val">${wday[d]}c</div></div>
@@ -2166,8 +2135,7 @@ function renderAnalytics(){
     });
     const tot=recs.reduce((s,r)=>s+(+r.amount||0),0);
     const comm=calcCommission(recs);
-    const tips=recs.reduce((s,r)=>s+(+r.tip||0),0)+bangTotal(recs);
-    months.push({label:`${MS[m]} ${y}`,total:tot,comm,tips});
+    months.push({label:`${MS[m]} ${y}`,total:tot,comm});
   }
   const maxM=Math.max(...months.map(m=>m.total),1);
   document.getElementById('monthChart').innerHTML=months.map(m=>`
@@ -2190,63 +2158,6 @@ function renderAnalytics(){
       <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:var(--green);border-radius:2px;display:inline-block"></span>Commission (49.95% / 55%)</span>
     </div>`;
 }
-function switchTab(btn,id){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  document.getElementById('tab-stats').style.display=id==='tab-stats'?'':'none';
-  document.getElementById('tab-ai').style.display=id==='tab-ai'?'':'none';
-}
-
-// ══ AI ══
-async function runAI(){
-  const el=document.getElementById('aiResult');
-  el.className='ai-result loading'; el.textContent='Analyzing... please wait';
-  const mr=monthRecords();
-  if(!mr.length){ el.className='ai-result'; el.textContent='No data for this month. Add appointments first.'; return; }
-  const total=mr.reduce((s,r)=>s+(+r.amount||0),0), tips=mr.reduce((s,r)=>s+(+r.tip||0),0), count=mr.length;
-  const commBase=commissionBase(mr), comm=calcCommission(mr);
-  const catCount={}; mr.forEach(r=>{const c=svcCat(r.service);catCount[c]=(catCount[c]||0)+1;});
-  const svcCount={}; mr.forEach(r=>svcCount[r.service]=(svcCount[r.service]||0)+1);
-  const allClients={}; DB.records.forEach(r=>allClients[r.client]=(allClients[r.client]||0)+1);
-  const repeatClients=Object.values(allClients).filter(v=>v>1).length, totalClients=Object.keys(allClients).length;
-
-  const prompt=`あなたはカナダのベテラン美容師のパーソナルコーチです。以下のデータを分析して、日本語で具体的なアドバイスをしてください。
-
-【${currentYear}年${MO[currentMonth]}のデータ】
-- 施術人数: ${count}人
-- 売上合計: $${fmt(total)} CAD
-- コミッション (49.5%): $${fmt(comm)} CAD
-- チップ合計: $${fmt(tips)} CAD
-- 手取り合計 (コミッション+チップ): $${fmt(comm+tips)} CAD
-- 平均客単価: $${fmt(count?total/count:0)} CAD
-- カテゴリー別: ${Object.entries(catCount).map(([k,v])=>k+': '+v+'件').join(' / ')}
-- 人気サービスTOP3: ${Object.entries(svcCount).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+' ('+v+'件)').join(', ')}
-- 総顧客数: ${totalClients}人 / リピーター: ${repeatClients}人 (リピート率${totalClients?Math.round(repeatClients/totalClients*100):0}%)
-
-以下の形式で回答してください：
-
-**📊 今月の総評**
-（2〜3文）
-
-**💪 強み**
-（2点）
-
-**🎯 改善ポイント**
-（2点）
-
-**🚀 来月のアクションプラン**
-1. 
-2. 
-3. 
-
-実践的で具体的なアドバイスをお願いします。`;
-
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
-    const data=await res.json();
-    el.className='ai-result'; el.textContent=data.content?.map(c=>c.text||'').join('')||'分析に失敗しました。';
-  }catch(e){ el.className='ai-result'; el.textContent='⚠️ AI Analysis is only available in the claude.ai preview.\n\nTo use it:\n1. Open claude.ai and find this conversation\n2. Export your data (Settings → Export JSON)\n3. Import it in the claude.ai preview\n4. Run the analysis there.'; }
-}
-
 // ══ SETTINGS ══
 function renderSettings(){
   renderAccount();
@@ -2317,7 +2228,7 @@ function addService(){
 }
 function removeService(i){ if(!confirm('Remove this service?'))return; DB.services.splice(i,1); save(); renderSettings(); toast('Removed'); }
 function exportData(){ const b=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'}),a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`stylist-data-${todayStr()}.json`; a.click(); }
-function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>{try{const d=JSON.parse(ev.target.result); if(d.records&&d.services){DB=d;save();toast('Data imported!');renderSettings();}}catch{toast('⚠️ Invalid file');}}; r.readAsText(f); }
+function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>{try{const d=JSON.parse(ev.target.result); if(d.records&&d.services){DB=d;DB.payPeriods=d.payPeriods||[];DB.schemaVersion=d.schemaVersion||1;migrateV2();save();toast('Data imported!');refreshAllViews();renderSettings();}}catch{toast('⚠️ Invalid file');}}; r.readAsText(f); }
 function clearAllData(){ DB.records=[]; DB.productSales=[]; save(); renderDashboard(); toast('All records deleted'); }
 
 // ══ TIP CALCULATOR ══
@@ -2340,72 +2251,11 @@ const RESIDENCE_EXCLUDED = [
 ];
 const RESIDENCE_MIN_PRICE = 50;
 
-function onCashTipToggle(){
-  const isCash = document.getElementById('isCashTip').checked;
-  document.getElementById('creditTipCalc').style.display = isCash ? 'none' : '';
-  document.getElementById('cashTipCalc').style.display   = isCash ? '' : 'none';
-  document.getElementById('tipFieldLabel').innerHTML = isCash
-    ? 'Cash Tip (CAD $) 💵'
-    : 'Tip (CAD $)';
-  if(isCash){
-    document.getElementById('fTotalSale').value = '';
-    document.getElementById('tipBreakdown').innerHTML = '';
-    document.getElementById('tipResult').textContent = '—';
-    document.getElementById('fTip').value = '';
-    document.getElementById('fCashReceived').value = '';
-    document.getElementById('cashTipBreakdown').innerHTML = '';
-    document.getElementById('cashTipResult').textContent = '—';
-  } else {
-    document.getElementById('fCashReceived').value = '';
-    document.getElementById('cashTipBreakdown').innerHTML = '';
-    document.getElementById('cashTipResult').textContent = '—';
-    document.getElementById('fTip').value = '';
-    calcTip();
-  }
-}
-
-function calcCashTip(){
-  const cashReceived    = parseFloat(document.getElementById('fCashReceived').value) || 0;
-  const amount          = parseFloat(document.getElementById('fAmount').value) || 0;
-  const gcOn            = document.getElementById('gcIncluded').checked;
-  const result          = document.getElementById('cashTipResult');
-  const breakdown       = document.getElementById('cashTipBreakdown');
-
-  // Include products (same as credit tip calc)
-  const productSubtotal = apptProducts.reduce((s,p) => s + (p.finalPrice||0), 0);
-  const productTax      = productSubtotal * 0.12;
-
-  if(!cashReceived || !amount){
-    breakdown.innerHTML = '<span style="color:var(--text-3)">Enter cash received &amp; Amount</span>';
-    result.textContent = '—';
-    document.getElementById('fTip').value = '';
-    return;
-  }
-
-  const tax      = amount * 0.05;
-  const gc       = gcOn ? 3 : 0;
-  const subtotal = amount + tax + gc + productSubtotal + productTax;
-  const tip      = cashReceived - subtotal;
-
-  breakdown.innerHTML = `Service: $${amount.toFixed(2)}<br>GST (5%): $${tax.toFixed(2)}<br>${gcOn?`GC: $3.00<br>`:''}${productSubtotal>0?`Products: $${productSubtotal.toFixed(2)}<br>Product tax (12%): $${productTax.toFixed(2)}<br>`:''}Subtotal: $${subtotal.toFixed(2)}`;
-
-  if(tip >= 0){
-    result.textContent = `$${tip.toFixed(2)}`;
-    result.style.color = tip > 0 ? '#b45309' : 'var(--text-3)';
-    document.getElementById('fTip').value = tip.toFixed(2);
-  } else {
-    result.textContent = '?';
-    result.style.color = 'var(--red)';
-    document.getElementById('fTip').value = '';
-  }
-}
-
 function onAmountManualEdit(){
   amountManualOverride = true;
   document.getElementById('amountOverrideNote').style.display = '';
   document.getElementById('discResetWrap').style.display = '';
   document.getElementById('discResult').style.display = 'none';
-  calcTip();
 }
 
 function resetAmountOverride(){
@@ -2497,60 +2347,14 @@ function applyDiscount() {
     </div>`;
 }
 
-let lastCalcTip = null;
-
+// (was the Total Sale tip calculator) keeps "Price before discount" in sync with the services
 function calcTip() {
-  const totalSale = parseFloat(document.getElementById('fTotalSale').value) || 0;
-  const amount    = parseFloat(document.getElementById('fAmount').value) || 0;
-  const gcOn      = document.getElementById('gcIncluded').checked;
-
-  // Sum product amounts (before tax) from apptProducts
-  const productSubtotal = apptProducts.reduce((s,p) => s + (p.finalPrice||0), 0);
-  const productTax = productSubtotal * 0.12;
-
-  const breakdown = document.getElementById('tipBreakdown');
-  const result    = document.getElementById('tipResult');
-  const applyBtn  = document.getElementById('tipApplyBtn');
-
-  if (!totalSale || !amount) {
-    breakdown.innerHTML = '<span style="color:var(--text-3)">Enter Total Sale &amp; Amount</span>';
-    result.textContent = '—';
-    applyBtn.style.display = 'none';
-    lastCalcTip = null;
-    return;
+  if(!listManual){
+    document.getElementById('fListPrice').value = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0) || '';
   }
-
-  // Service: GST 5% / GC: tax-exempt / Product: 12%
-  const taxAmount   = amount * TAX_RATE;
-  const gcCharge    = gcOn ? GC_PRICE : 0;
-  const subtotal    = amount + taxAmount + gcCharge + productSubtotal + productTax;
-  const tip         = totalSale - subtotal;
-
-  breakdown.innerHTML = `
-    Service: $${amount.toFixed(2)}<br>
-    GST (5%): $${taxAmount.toFixed(2)}<br>
-    ${gcOn ? `GC fee: $${GC_PRICE.toFixed(2)} (tax-free)<br>` : ''}
-    ${productSubtotal > 0 ? `Products: $${productSubtotal.toFixed(2)}<br>Product tax (12%): $${productTax.toFixed(2)}<br>` : ''}
-    Subtotal: $${subtotal.toFixed(2)}
-  `;
-
-  if (tip >= 0) {
-    result.textContent = `$${tip.toFixed(2)}`;
-    result.style.color = tip > 0 ? 'var(--accent)' : 'var(--text-3)';
-    lastCalcTip = tip;
-    applyBtn.style.display = 'none';
-    document.getElementById('fTip').value = tip.toFixed(2);
-  } else {
-    result.textContent = '?';
-    result.style.color = 'var(--red)';
-    result.title = 'Negative result — check amounts';
-    lastCalcTip = null;
-    applyBtn.style.display = 'none';
-    document.getElementById('fTip').value = '';
-  }
+  const k=document.getElementById('fKind').value;
+  if(k==='fulltip'||k==='noshow') document.getElementById('fAmount').value=0;
 }
-
-function applyTip() {} // 廃止（自動反映に変更）
 
 // ══ PRODUCTS (in appointment) ══
 const PROD_CATS = ['Shampoo/Conditioner','Treatment/Mask','Styling Products','Tools','Accessories','Other'];
@@ -2971,7 +2775,8 @@ document.getElementById('todayLabel').textContent=new Date().toLocaleDateString(
 renderDashboard();
 initForm();
 // Log in (saved login) then pull from Firebase
-startSync().then(synced=>{ if(synced) refreshAllViews(); });
+startSync().then(synced=>{ if(synced){ ensureMigrated(); refreshAllViews(); } });
+document.getElementById('appVersion').textContent = 'App version ' + APP_VERSION;
 </script>
 </body>
 </html>
