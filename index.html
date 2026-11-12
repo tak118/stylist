@@ -566,6 +566,21 @@ input:-webkit-autofill:focus {
       <div class="card-body" style="padding:20px"><div id="accountUI"></div><div style="font-size:11px;color:var(--text-3);margin-top:12px" id="appVersion"></div></div>
     </div>
     <div class="card">
+      <div class="card-header"><span class="card-title">📥 Import</span></div>
+      <div class="card-body" style="padding:20px">
+        <div style="font-size:12.5px;color:var(--text-2);line-height:1.7;margin-bottom:12px">
+          Files that Claude made from Fresha photos and pay stubs. You can check everything before it is saved.
+          The same appointment or pay period is never added twice.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('apptFile').click()">Fresha appointments CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('stubFile').click()">Pay stubs CSV (half-month)</button>
+          <input type="file" id="apptFile" accept=".csv,text/csv" style="display:none" onchange="readImportFile(event,openApptImport)">
+          <input type="file" id="stubFile" accept=".csv,text/csv" style="display:none" onchange="readImportFile(event,openStubImport)">
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-header"><span class="card-title">💲 Price List (Fresha)</span></div>
       <div class="card-body" style="padding:20px">
         <div style="font-size:12.5px;color:var(--text-2);line-height:1.7;margin-bottom:12px">
@@ -733,6 +748,20 @@ input:-webkit-autofill:focus {
 </div>
 
 <div class="toast" id="toast"></div>
+<!-- GENERIC IMPORT MODAL -->
+<div class="overlay" id="importModal">
+  <div class="modal-box" style="max-width:920px">
+    <div class="modal-header"><div class="modal-title" id="importTitle"></div><button class="close-btn" onclick="closeImport()">✕</button></div>
+    <div class="modal-body" style="padding:16px;overflow-x:auto;max-height:65vh;overflow-y:auto" id="importBody"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <span style="font-size:12px;color:var(--text-3)" id="importSum"></span>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-sm" onclick="closeImport()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="importApplyBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- PRICE LIST IMPORT MODAL -->
 <div class="overlay" id="priceModal">
   <div class="modal-box" style="max-width:860px">
@@ -891,7 +920,7 @@ let apptProducts = [];
 let productOnlyItems = [];
 let amountManualOverride = false; // true when user has manually edited Amount
 let listManual = false;            // true when user has manually edited "Price before discount"
-const APP_VERSION = '2.3 (2026-11-12)';
+const APP_VERSION = '2.4 (2026-11-12)';
 
 // ══ FIREBASE SYNC with Email/Password Auth ══
 // Only Tak's own account can read/write (Firebase rules check the uid).
@@ -1373,22 +1402,25 @@ function renderPeriods(){
   const keys=allPeriodKeys().reverse();
   if(!keys.length){ tbl.innerHTML='<tbody><tr class="tbl-empty"><td>No data yet</td></tr></tbody>'; return; }
   const inp='class="form-input mono" style="width:88px;padding:5px 7px;font-size:13px"';
-  tbl.innerHTML=`<thead><tr><th>Period</th><th>Clients</th><th>Sales</th><th>Est. comm.</th><th>💳 Card tips</th><th>💵 Cash tips</th><th>Tip %</th><th>Note</th></tr></thead><tbody>`+
+  tbl.innerHTML=`<thead><tr><th>Period</th><th>Clients</th><th>Sales</th><th>📄 Stub sales</th><th>Est. comm.</th><th>📄 Stub comm.</th><th>💳 Card tips</th><th>💵 Cash tips</th><th>Tip %</th><th>📄 Product com.</th><th>Note</th></tr></thead><tbody>`+
   keys.map(k=>{
     const recs=periodRecords(k), p=findPeriod(k)||{};
     const base=commissionBase(recs), rate=commissionRate(monthBaseOf(k.slice(0,7)));
     const served=recs.filter(isServed).length;
     const tipPct = (p.cardTips!=null && base) ? (p.cardTips/base*100).toFixed(1)+'%' : '—';
-    const label=`${fmtDate(k)} – ${fmtDate(periodEnd(k)).replace(/^\w+ /,'')}, ${k.slice(0,4)}`;
+    const label=`${fmtDate(k)} – ${fmtDate(periodEnd(k)).replace(/^\w+ /,'')}, ${k.slice(0,4)}`+(p.paystub&&p.paystub.memo?`<div style="font-size:10.5px;font-weight:400;color:var(--text-3);white-space:normal;max-width:180px">📄 ${p.paystub.memo}</div>`:'');
     return `<tr>
       <td style="white-space:nowrap;font-weight:600;font-size:12.5px">${label}</td>
       <td class="mono">${served||'—'}</td>
       <td class="mono">${base?'$'+fmt(base):'—'}</td>
+      <td class="mono" style="font-size:12px">${stubCell(p, base)}</td>
       <td class="mono" style="color:var(--accent)">${base?'$'+fmt(base*rate):'—'}${rate>0.5?' <span style="font-size:10px">55%</span>':''}</td>
+      <td class="mono" style="font-size:12px">${p.paystub&&p.paystub.commissionTotal!=null?'$'+fmt(p.paystub.commissionTotal):'—'}</td>
       <td><input ${inp} type="number" step="0.01" value="${p.cardTips??''}" onchange="setPeriodVal('${k}','cardTips',this.value)"></td>
       <td style="white-space:nowrap"><input ${inp} type="number" step="0.01" value="${p.cashTips??''}" ${p.cashUnknown?'disabled':''} onchange="setPeriodVal('${k}','cashTips',this.value)">
         <label style="font-size:11px;color:var(--text-3);margin-left:4px;cursor:pointer"><input type="checkbox" ${p.cashUnknown?'checked':''} onchange="setPeriodVal('${k}','cashUnknown',this.checked)"> ?</label></td>
       <td class="mono" style="font-size:12px">${tipPct}</td>
+      <td class="mono" style="font-size:12px">${p.paystub&&p.paystub.productCom?'$'+fmt(p.paystub.productCom):'—'}</td>
       <td><input class="form-input" style="min-width:120px;padding:5px 7px;font-size:12.5px" value="${(p.note||'').replace(/"/g,'&quot;')}" onchange="setPeriodVal('${k}','note',this.value)"></td>
     </tr>`;
   }).join('')+'</tbody>';
@@ -2224,6 +2256,178 @@ function renderAnalytics(){
       <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:var(--green);border-radius:2px;display:inline-block"></span>Commission (49.95% / 55%)</span>
     </div>`;
 }
+// ══ IMPORT: Fresha appointments / pay stubs ══
+function readImportFile(e, fn){
+  const f=e.target.files[0]; if(!f) return; e.target.value='';
+  const rd=new FileReader();
+  rd.onload=ev=>{ try{ fn(parseCSV(ev.target.result)); }catch(err){ console.error(err); toast('⚠️ Could not read the CSV'); } };
+  rd.readAsText(f,'utf-8');
+}
+function csvObjects(rows){ const hd=rows[0].map(h=>h.trim()); return rows.slice(1).map(r=>Object.fromEntries(hd.map((h,i)=>[h,(r[i]||'').trim()]))); }
+function closeImport(){ document.getElementById('importModal').classList.remove('open'); IMP=null; }
+function openImport(title, apply){
+  document.getElementById('importTitle').textContent=title;
+  document.getElementById('importApplyBtn').onclick=apply;
+  document.getElementById('importModal').classList.add('open');
+}
+let IMP=null;
+function esc(t){ return String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+// Find the app menu for a Fresha menu name: exact / old name, else same words (+1)
+function matchService(name){
+  const ex=findSvc(name); if(ex) return ex.name;
+  const F=normTokens(name); let best=null, bestD=9;
+  DB.services.forEach(s=>{ const A=normTokens(s.name); if(![...A].every(t=>F.has(t))) return; const d=F.size-A.size; if(d<=1&&d<bestD){best=s;bestD=d;} });
+  return best ? best.name : '';
+}
+function apptKind(row){
+  const n=row['料金の注']||'', m=row['メニュー']||'', c=row['お客様']||'';
+  if(/調整/.test(c)||/^調整/.test(m)) return 'adjust';
+  if(/ノーショー|no.?show/i.test(n+m)) return 'noshow';
+  if(/全額チップ/.test(n)) return 'fulltip';
+  return 'normal';
+}
+function apptKey(r){ return [r.date, r.time, r.client, r.rawMenu].join('\u241F'); }
+function isMenuRow(row){ const k=apptKind(row); return k!=='adjust' && !/^\(.*ノーショー.*\)$/.test(row['メニュー']||''); }
+function openApptImport(rows){
+  const objs=csvObjects(rows).filter(o=>o['日付']);
+  if(!objs.length || !('メニュー' in objs[0])){ toast('⚠️ This is not the Fresha appointments CSV'); return; }
+  const rowsX=objs.map((o,i)=>{
+    const kind=apptKind(o), amount=round2(parseFloat(o['料金'])||0), note=o['料金の注']||'';
+    const menu=isMenuRow(o)?o['メニュー']:'';
+    const target=menu?matchService(menu):'';
+    const m=note.match(/(?:割引前|定価from|^from)\s*\$?(\d+(?:\.\d+)?)/);
+    let listPrice = m ? +m[1] : amount;
+    if(!m && kind==='fulltip' && target) listPrice=priceOf(target, o['日付']);
+    return {i, date:o['日付'], time:o['時間']||'', client:o['お客様']||'', menu, rawMenu:o['メニュー'], amount, listPrice, note, check:o['確認']||'',
+      kind, dur:parseDur(o['所要時間'])||0, target, newCat:guessCat(menu||'')};
+  });
+  // group: same date + same name = one visit (can be split in the preview)
+  const groups=[]; const byKey={};
+  rowsX.forEach(r=>{
+    const k=r.kind==='adjust' ? 'adj'+r.i : r.date+'|'+r.client;
+    if(!byKey[k]){ byKey[k]={rows:[], separate:false}; groups.push(byKey[k]); }
+    byKey[k].rows.push(r);
+  });
+  groups.forEach(g=>{
+    const mains=g.rows.filter(r=>r.menu && !/^add on|consultation/i.test(r.menu));
+    g.separate = mains.length>1 && g.rows.some(r=>/child|teen/i.test(r.menu)); // parent + child under one name
+    g.exists = DB.records.some(x=>(x.importKeys||[]).some(k=>g.rows.some(r=>k===apptKey(r))));
+    g.sameDay = !g.exists && g.rows[0].kind!=='adjust' && DB.records.some(x=>x.date===g.rows[0].date && x.client===g.rows[0].client);
+    g.skip = g.exists || g.sameDay;
+  });
+  IMP={type:'appt', groups};
+  renderApptImport();
+  openImport('Import Fresha appointments — check before saving', applyApptImport);
+}
+function renderApptImport(){
+  const opts=t=>`<option value="">＋ New service (Fresha name)</option>`+DB.services.map(s=>`<option value="${esc(s.name)}"${s.name===t?' selected':''}>${esc(s.name)}</option>`).join('');
+  const kinds={normal:'',fulltip:'Full tip',noshow:'No-show',adjust:'Adjustment'};
+  let html=`<table class="tbl" style="font-size:12px"><thead><tr><th></th><th>Date</th><th>Time</th><th>Client</th><th>Fresha menu → app menu</th><th>Before</th><th>Amount</th><th>Type</th><th>Note</th></tr></thead><tbody>`;
+  IMP.groups.forEach((g,gi)=>{
+    const multi=g.rows.length>1;
+    g.rows.forEach((r,ri)=>{
+      html+=`<tr style="${g.skip?'opacity:.45;':''}${ri===0&&gi?'border-top:2px solid var(--border);':''}">
+        <td style="white-space:nowrap">${ri===0?`<input type="checkbox" title="Import" ${g.skip?'':'checked'} onchange="IMP.groups[${gi}].skip=!this.checked;renderApptImport()">`:''}</td>
+        <td style="white-space:nowrap">${ri===0?r.date:''}</td><td>${r.time}</td>
+        <td style="font-weight:600">${ri===0?esc(r.client):''}${ri===0&&multi?`<div style="font-weight:400;font-size:11px;color:var(--text-3)"><label><input type="checkbox" ${g.separate?'checked':''} onchange="IMP.groups[${gi}].separate=this.checked;renderApptImport()"> different people</label><br>${g.separate?g.rows.length+' visits':'1 visit'}</div>`:''}
+          ${ri===0&&g.exists?'<div style="font-size:11px;color:var(--amber)">already imported</div>':''}${ri===0&&g.sameDay?'<div style="font-size:11px;color:var(--amber)">already in the app on this day?</div>':''}</td>
+        <td>${r.menu?`<div>${esc(r.menu)}</div><select class="form-select" style="padding:3px 6px;font-size:11.5px;min-width:190px;max-width:250px" onchange="IMP.groups[${gi}].rows[${ri}].target=this.value;renderApptImport()">${opts(r.target)}</select>`:`<span style="color:var(--text-3)">${esc(r.rawMenu)}</span>`}</td>
+        <td class="mono">${r.listPrice!==r.amount?'$'+fmt(r.listPrice):''}</td>
+        <td class="mono" style="font-weight:600">$${fmt(r.amount)}</td>
+        <td>${kinds[r.kind]?`<span style="font-size:11px">${kinds[r.kind]}</span>`:''}</td>
+        <td style="font-size:11px;color:var(--text-3);max-width:180px">${esc(r.note)}</td></tr>`;
+    });
+  });
+  html+='</tbody></table>';
+  document.getElementById('importBody').innerHTML=html;
+  const use=IMP.groups.filter(g=>!g.skip);
+  const recs=use.reduce((n,g)=>n+(g.separate?g.rows.length:1),0);
+  const total=use.reduce((s,g)=>s+g.rows.reduce((a,r)=>a+r.amount,0),0);
+  const unknown=use.reduce((n,g)=>n+g.rows.filter(r=>r.menu&&!r.target).length,0);
+  document.getElementById('importSum').textContent=`${recs} appointments · $${fmt(total)} · ${IMP.groups.length-use.length} skipped${unknown?` · ${unknown} new menu name(s)`:''}`;
+}
+function applyApptImport(){
+  let n=0; const now=Date.now();
+  IMP.groups.forEach((g,gi)=>{
+    if(g.skip) return;
+    // services: matched app menu, or a new service with the Fresha name
+    g.rows.forEach(r=>{
+      if(!r.menu) return;
+      if(!r.target){
+        let s=DB.services.find(x=>x.name===r.menu);
+        if(!s){ s={name:r.menu, category:r.newCat||guessCat(r.menu), duration:r.dur||60, defaultPrice:r.listPrice||r.amount}; DB.services.push(s); }
+        r.target=s.name;
+      } else {
+        const s=DB.services.find(x=>x.name===r.target);
+        if(s && s.name!==r.menu && !(s.aliases||[]).includes(r.menu)) s.aliases=[...(s.aliases||[]), r.menu];   // remember the Fresha name
+      }
+    });
+    const parts = g.separate ? g.rows.map(r=>[r]) : [g.rows];
+    parts.forEach((rs,pi)=>{
+      const svcs=rs.filter(r=>r.target).map(r=>r.target);
+      const kinds=[...new Set(rs.map(r=>r.kind))];
+      const kind = kinds.length===1 ? kinds[0] : (rs.every(r=>r.kind!=='normal') ? kinds.find(k=>k!=='normal') : 'normal');
+      const rec={
+        id:`${now}${gi}${pi}`, date:rs[0].date, time:rs[0].time, client:rs[0].client||'(調整)',
+        service: svcs.length?svcs.join(' + '):(kind==='adjust'?'Adjustment':kind==='noshow'?'No-show':'—'),
+        services:svcs, products:[],
+        amount:round2(rs.reduce((a,r)=>a+r.amount,0)), listPrice:round2(rs.reduce((a,r)=>a+r.listPrice,0)),
+        duration:rs.reduce((a,r)=>a+r.dur,0),
+        note:rs.map(r=>[r.note,r.check].filter(Boolean).join(' / ')).filter(Boolean).join(' | ') || (kind==='adjust'?rs[0].rawMenu:''),
+        source:'fresha-photo', importKeys:rs.map(apptKey)
+      };
+      if(kind!=='normal') rec.kind=kind;
+      DB.records.push(rec); n++;
+    });
+  });
+  closeImport(); save(); refreshAllViews(); toast(`✓ ${n} appointments imported`);
+}
+
+// Pay stubs: one row per half-month period (the newest / revised stub)
+const STUB_FIELDS={hourly:'時給',hours:'時間',regular:'Regular',commissionField:'Commission欄',commissionTotal:'歩合合計',salesEst:'施術売上_推定',
+  holiday:'祝日',sick:'病欠など',productCom:'物販歩合',vacation:'有給4パーセント',gross:'総支給',cpp:'CPP',ei:'EI',tax:'税',net:'手取り',cardTips:'カードチップ'};
+function openStubImport(rows){
+  const objs=csvObjects(rows).filter(o=>o['期間開始']);
+  if(!objs.length || !('歩合合計' in objs[0])){ toast('⚠️ This is not the half-month pay stub CSV'); return; }
+  IMP={type:'stub', rows:objs.map(o=>{
+    const start=o['期間開始'], stub={};
+    Object.entries(STUB_FIELDS).forEach(([k,h])=>{ const v=o[h]; stub[k]= (v===''||v==null) ? null : round2(parseFloat(v)); });
+    stub.guarantee = !!o['時給保証']; stub.memo=o['メモ']||''; stub.emailId=o['メールID']||'';
+    const p=findPeriod(start)||{};
+    const hasNumbers = stub.gross!=null;
+    return {start, stub, hasNumbers, oldCard:p.cardTips??null, appSales:round2(commissionBase(periodRecords(start))), had:!!p.paystub};
+  }).sort((a,b)=>b.start.localeCompare(a.start))};
+  const tb=IMP.rows.map(r=>`<tr${r.hasNumbers?'':' style="color:var(--text-3)"'}>
+    <td style="white-space:nowrap;font-weight:600">${r.start}</td>
+    <td class="mono">${r.stub.salesEst!=null?'$'+fmt(r.stub.salesEst):'—'}</td>
+    <td class="mono">${r.appSales?'$'+fmt(r.appSales):'—'}</td>
+    <td class="mono">${r.stub.commissionTotal!=null?'$'+fmt(r.stub.commissionTotal):'—'}</td>
+    <td class="mono">${r.stub.cardTips!=null?'$'+fmt(r.stub.cardTips):'—'}${r.oldCard!=null&&r.stub.cardTips!=null&&r.oldCard!==r.stub.cardTips?`<div style="font-size:10.5px;color:var(--amber)">now $${fmt(r.oldCard)} → replaced</div>`:''}</td>
+    <td class="mono">${r.stub.productCom?'$'+fmt(r.stub.productCom):'—'}</td>
+    <td class="mono">${r.stub.net!=null?'$'+fmt(r.stub.net):'—'}</td>
+    <td style="font-size:11px;color:var(--text-3);max-width:220px">${esc(r.stub.memo)}${r.had?' <span style="color:var(--accent)">(update)</span>':''}</td></tr>`).join('');
+  document.getElementById('importBody').innerHTML=`<table class="tbl" style="font-size:12px"><thead><tr><th>Period</th><th>Stub sales</th><th>App sales</th><th>Commission</th><th>💳 Card tips</th><th>Product com.</th><th>Net pay</th><th>Memo</th></tr></thead><tbody>${tb}</tbody></table>`;
+  const withN=IMP.rows.filter(r=>r.hasNumbers).length;
+  document.getElementById('importSum').textContent=`${IMP.rows.length} periods (${withN} with a pay stub) · card tips come from the stubs; cash tips are not changed`;
+  openImport('Import pay stubs — check before saving', applyStubImport);
+}
+function applyStubImport(){
+  IMP.rows.forEach(r=>{
+    const p=getOrCreatePeriod(r.start);
+    p.paystub=r.stub;
+    if(r.stub.cardTips!=null) p.cardTips=r.stub.cardTips;
+  });
+  const n=IMP.rows.length;
+  closeImport(); save(); refreshAllViews(); toast(`✓ ${n} pay periods updated`);
+}
+function stubCell(p, base){
+  if(!p.paystub || p.paystub.salesEst==null) return '—';
+  const d=round2(base - p.paystub.salesEst);
+  const col = Math.abs(d)<=1 ? 'var(--green)' : 'var(--amber)';
+  return `$${fmt(p.paystub.salesEst)}${base?`<div style="font-size:10.5px;color:${col}">${Math.abs(d)<=1?'✓ matches':'app '+(d>0?'+':'−')+'$'+fmt(Math.abs(d))}</div>`:''}`;
+}
+
 // ══ PRICE LIST (CSV import / export) ══
 function parseCSV(text){
   text=text.replace(/^﻿/,'');
