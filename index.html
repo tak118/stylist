@@ -530,6 +530,19 @@ input:-webkit-autofill:focus {
         <div class="card-header"><span class="card-title">💰 Commission Summary</span><span style="font-size:12px;color:var(--text-3)">49.95% (≤$10k/month) · 55% (>$10k/month)</span></div>
         <div class="card-body" style="padding:16px"><div id="commSummary"></div></div>
       </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><span class="card-title">📄 Pay stub history</span>
+          <select class="form-select" id="stubRange" style="width:auto;padding:4px 8px;font-size:12px" onchange="renderStubCharts()"><option value="12">Last 12 months</option><option value="24" selected>Last 24 months</option><option value="all">All</option></select></div>
+        <div class="card-body" style="padding:16px">
+          <div style="font-size:12.5px;font-weight:700;margin-bottom:2px">Sales per month</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px">From the pay stubs (commission ÷ 49.95%). Dashed line = $10,000 (55% step).</div>
+          <div id="stubSalesChart" style="position:relative"></div>
+          <div style="font-size:12.5px;font-weight:700;margin:16px 0 2px">Card tips per month</div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:6px">Hover a bar for commission, tips and tip %.</div>
+          <div id="stubTipsChart" style="position:relative"></div>
+          <details style="margin-top:10px;font-size:12px"><summary style="cursor:pointer;color:var(--text-2)">Show as table</summary><div id="stubTable" style="overflow-x:auto;margin-top:8px"></div></details>
+        </div>
+      </div>
       <div class="card" style="margin-bottom:20px;display:none">
         <div class="card-header"><span class="card-title">🛍️ Product Sales</span><span style="font-size:12px;color:var(--text-3)">Commission: $300+ → 5% · $500+ → 10%</span></div>
         <div class="card-body" style="padding:16px"><div id="productSummary"></div></div>
@@ -546,7 +559,9 @@ input:-webkit-autofill:focus {
   <div class="page" id="page-periods">
     <div class="page-header">
       <div><div class="page-title">Pay Periods</div><div class="page-sub">Tips and totals per pay period (1–15 / 16–end of month)</div></div>
+      <select class="form-select" id="periodYear" style="width:auto" onchange="renderPeriods()"></select>
     </div>
+    <div id="periodAlerts"></div>
     <div class="card">
       <div class="card-body" style="padding:0;overflow-x:auto"><table class="tbl" id="periodsTable"></table></div>
     </div>
@@ -920,7 +935,7 @@ let apptProducts = [];
 let productOnlyItems = [];
 let amountManualOverride = false; // true when user has manually edited Amount
 let listManual = false;            // true when user has manually edited "Price before discount"
-const APP_VERSION = '2.4 (2026-11-12)';
+const APP_VERSION = '2.5 (2026-11-12)';
 
 // ══ FIREBASE SYNC with Email/Password Auth ══
 // Only Tak's own account can read/write (Firebase rules check the uid).
@@ -1310,9 +1325,11 @@ function isExcluded(name, date){
 }
 // Commission rate based on MONTHLY service revenue — the whole month at one rate
 // $0-$10,000 = 49.95%, over $10,000 = 55%
-function commissionRate(base) {
+function commissionRate(base, ym) {
+  if(ym && ym < TIER55_FROM) return 0.4995;      // the 55% step was agreed in March 2025
   return base <= 10000 ? 0.4995 : 0.55;
 }
+const TIER55_FROM = '2025-03';
 // Commission-eligible revenue (after discount; excludes GC, fees, Bang in full-tip era)
 function commissionBase(records) {
   let total = 0;
@@ -1370,6 +1387,47 @@ function getOrCreatePeriod(key){
 }
 function periodRecords(key){ const end=periodEnd(key); return DB.records.filter(r=>r.date && r.date>=key && r.date<=end); }
 function monthKey(date){ return date.slice(0,7); }
+// Month sales: app records, or the pay stubs when the app has nothing for that half
+function monthSalesOf(ym){
+  return [`${ym}-01`,`${ym}-16`].reduce((t,k)=>{
+    const b=commissionBase(periodRecords(k)); if(b) return t+b;
+    const p=findPeriod(k); return t+((p&&p.paystub&&p.paystub.salesEst)||0);
+  },0);
+}
+// Sales for tip %: the pay stub when there is one (it is complete), else the app records
+function periodSales(k){ const p=findPeriod(k); if(p&&p.paystub&&p.paystub.salesEst) return p.paystub.salesEst; return commissionBase(periodRecords(k)); }
+// Average card-tip % of up to 12 earlier periods (for "unusual" marks)
+function avgTipPct(k){
+  const prev=(DB.payPeriods||[]).filter(p=>p.start<k && p.cardTips!=null).sort((a,b)=>b.start.localeCompare(a.start))
+    .map(p=>({p, s:periodSales(p.start)})).filter(x=>x.s>0).slice(0,12);
+  if(prev.length<4) return null;
+  return prev.reduce((a,x)=>a+x.p.cardTips/x.s*100,0)/prev.length;
+}
+// Checks for one pay period → list of {level:'ok'|'warn'|'info', text}
+function periodChecks(k){
+  const out=[], p=findPeriod(k)||{}, ym=k.slice(0,7), recs=periodRecords(k), base=commissionBase(recs), st=p.paystub;
+  const mSales=monthSalesOf(ym), rate=commissionRate(mSales, ym);
+  if(st && st.commissionTotal!=null && base){
+    const exp=round2(base*rate), d=round2(st.commissionTotal-exp);
+    if(st.guarantee) out.push({level:'info', text:'Hourly guarantee (pay is more than commission)'});
+    else if(Math.abs(d)<=1) out.push({level:'ok', text:'Commission matches'});
+    else out.push({level:'warn', text:`Stub commission ${d>0?'+':'−'}$${fmt(Math.abs(d))} vs app × ${(rate*100).toFixed(2)}%${d>100?' (appointments missing in app?)':''}`});
+  }
+  if(mSales>10000 && ym>=TIER55_FROM && k.endsWith('16')){
+    const s55=st && st.commissionTotal!=null ? (()=>{ const both=[`${ym}-01`,`${ym}-16`].map(findPeriod); const c=both.reduce((a,x)=>a+((x&&x.paystub&&x.paystub.commissionTotal)||0),0); return c/mSales; })() : null;
+    out.push({level:'warn', text:`Month over $10,000 → should be 55%${s55!=null?` (stubs pay ${(s55*100).toFixed(1)}%)`:''}`});
+  }
+  const sales=periodSales(k);
+  if(p.cardTips!=null && sales){
+    const avg=avgTipPct(k), pct=p.cardTips/sales*100;
+    if(avg!=null && Math.abs(pct-avg)>4) out.push({level:'warn', text:`Tip ${pct.toFixed(1)}% (usual ${avg.toFixed(1)}%)`});
+  } else if(recs.length && p.cardTips==null) out.push({level:'warn', text:'Card tips missing'});
+  return out;
+}
+function checkBadges(list){
+  const col={ok:'var(--green)', warn:'var(--amber)', info:'var(--text-3)'}, ic={ok:'✓', warn:'⚠️', info:'ℹ️'};
+  return list.map(c=>`<div style="font-size:11px;color:${col[c.level]};white-space:nowrap">${ic[c.level]} ${c.text}</div>`).join('');
+}
 function monthBaseOf(ym){ return commissionBase(DB.records.filter(r=>r.date && r.date.startsWith(ym))); }
 // Tips for a calendar month = the two pay periods of that month
 function monthTips(year, month){
@@ -1399,15 +1457,22 @@ function setPeriodVal(key, field, val){
 }
 function renderPeriods(){
   const tbl=document.getElementById('periodsTable'); if(!tbl) return;
-  const keys=allPeriodKeys().reverse();
+  const all=allPeriodKeys().reverse();
+  const ysel=document.getElementById('periodYear');
+  const years=[...new Set(all.map(k=>k.slice(0,4)))];
+  const cur=ysel.value && years.includes(ysel.value) ? ysel.value : (years[0]||'');
+  ysel.innerHTML=years.map(y=>`<option${y===cur?' selected':''}>${y}</option>`).join('')+`<option value="all"${ysel.value==='all'?' selected':''}>All years</option>`;
+  const keys = ysel.value==='all' ? all : all.filter(k=>k.startsWith(cur));
+  const warnCount=keys.reduce((n,k)=>n+periodChecks(k).filter(c=>c.level==='warn').length,0);
+  document.getElementById('periodAlerts').innerHTML = warnCount ? `<div style="font-size:12.5px;color:var(--amber);font-weight:600;margin-bottom:10px">⚠️ ${warnCount} thing${warnCount>1?'s':''} to check in ${ysel.value==='all'?'all years':cur} — see the Check column</div>` : '';
   if(!keys.length){ tbl.innerHTML='<tbody><tr class="tbl-empty"><td>No data yet</td></tr></tbody>'; return; }
   const inp='class="form-input mono" style="width:88px;padding:5px 7px;font-size:13px"';
-  tbl.innerHTML=`<thead><tr><th>Period</th><th>Clients</th><th>Sales</th><th>📄 Stub sales</th><th>Est. comm.</th><th>📄 Stub comm.</th><th>💳 Card tips</th><th>💵 Cash tips</th><th>Tip %</th><th>📄 Product com.</th><th>Note</th></tr></thead><tbody>`+
+  tbl.innerHTML=`<thead><tr><th>Period</th><th>Clients</th><th>Sales</th><th>📄 Stub sales</th><th>Est. comm.</th><th>📄 Stub comm.</th><th>💳 Card tips</th><th>💵 Cash tips</th><th>Tip %</th><th>📄 Product com.</th><th>Check</th><th>Note</th></tr></thead><tbody>`+
   keys.map(k=>{
     const recs=periodRecords(k), p=findPeriod(k)||{};
-    const base=commissionBase(recs), rate=commissionRate(monthBaseOf(k.slice(0,7)));
+    const ym=k.slice(0,7), base=commissionBase(recs), rate=commissionRate(monthSalesOf(ym), ym);
     const served=recs.filter(isServed).length;
-    const tipPct = (p.cardTips!=null && base) ? (p.cardTips/base*100).toFixed(1)+'%' : '—';
+    const ps=periodSales(k); const tipPct = (p.cardTips!=null && ps) ? (p.cardTips/ps*100).toFixed(1)+'%' : '—';
     const label=`${fmtDate(k)} – ${fmtDate(periodEnd(k)).replace(/^\w+ /,'')}, ${k.slice(0,4)}`+(p.paystub&&p.paystub.memo?`<div style="font-size:10.5px;font-weight:400;color:var(--text-3);white-space:normal;max-width:180px">📄 ${p.paystub.memo}</div>`:'');
     return `<tr>
       <td style="white-space:nowrap;font-weight:600;font-size:12.5px">${label}</td>
@@ -1421,6 +1486,7 @@ function renderPeriods(){
         <label style="font-size:11px;color:var(--text-3);margin-left:4px;cursor:pointer"><input type="checkbox" ${p.cashUnknown?'checked':''} onchange="setPeriodVal('${k}','cashUnknown',this.checked)"> ?</label></td>
       <td class="mono" style="font-size:12px">${tipPct}</td>
       <td class="mono" style="font-size:12px">${p.paystub&&p.paystub.productCom?'$'+fmt(p.paystub.productCom):'—'}</td>
+      <td>${checkBadges(periodChecks(k))}</td>
       <td><input class="form-input" style="min-width:120px;padding:5px 7px;font-size:12.5px" value="${(p.note||'').replace(/"/g,'&quot;')}" onchange="setPeriodVal('${k}','note',this.value)"></td>
     </tr>`;
   }).join('')+'</tbody>';
@@ -1509,7 +1575,7 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Monthly Revenue</div><div class="stat-value"><sup>$</sup>${Math.round(mSales)}</div>
       <div class="stat-delta ${diff===null?'':diff>=0?'d-up':'d-down'}">${diff===null?'No prev. data':(diff>=0?'↑ ':'↓ ')+Math.abs(diff).toFixed(1)+'% vs last month'}</div></div>
     <div class="stat-card" style="border-color:#a5b4fc;background:linear-gradient(135deg,#eef2ff,#fff)">
-      <div class="stat-label" style="color:var(--accent)">My Commission <span style="font-weight:400;opacity:.7">(${mCommBase>10000?'55':'49.95'}%)</span></div>
+      <div class="stat-label" style="color:var(--accent)">My Commission <span style="font-weight:400;opacity:.7">(${mCommBase>10000?'55':'49.95'}%)</span></div>${mCommBase>10000?`<div style="font-size:11px;font-weight:700;color:var(--amber)">🎉 Over $10,000 — check the stub pays 55%</div>`:(mCommBase>8500?`<div style="font-size:11px;color:var(--text-3)">$${fmt(10000-mCommBase)} to the 55% step</div>`:'')}
       <div class="stat-value" style="color:var(--accent)"><sup style="color:var(--accent)">$</sup>${Math.round(mComm)}</div>
       <div class="stat-delta ${commDiff===null?'':commDiff>=0?'d-up':'d-down'}">${commDiff===null?`Base: $${fmt(mCommBase)}`:(commDiff>=0?'↑ ':'↓ ')+Math.abs(commDiff).toFixed(1)+'% vs last month'}</div></div>
     <div class="stat-card" onclick="nav('periods')" style="cursor:pointer"><div class="stat-label">Tips</div><div class="stat-value"><sup>$</sup>${Math.round(mt.total)}</div>
@@ -2231,11 +2297,16 @@ function renderAnalytics(){
       const d=new Date(r.date+'T12:00:00');
       return !isNaN(d.getTime()) && d.getMonth()===m && d.getFullYear()===y;
     });
-    const tot=recs.reduce((s,r)=>s+(+r.amount||0),0);
-    const comm=calcCommission(recs);
-    months.push({label:`${MS[m]} ${y}`,total:tot,comm});
+    let tot=recs.reduce((s,r)=>s+(+r.amount||0),0);
+    let comm=calcCommission(recs), lbl=`${MS[m]} ${y}`;
+    if(!recs.length){
+      const ym=`${y}-${String(m+1).padStart(2,'0')}`, sm=stubMonths().find(x=>x.ym===ym);
+      if(sm){ tot=sm.sales; comm=sm.comm; lbl+=' 📄'; }
+    }
+    months.push({label:lbl,total:tot,comm});
   }
   const maxM=Math.max(...months.map(m=>m.total),1);
+  setTimeout(renderStubCharts,0);
   document.getElementById('monthChart').innerHTML=months.map(m=>`
     <div class="bar-row">
       <div class="bar-label">${m.label}</div>
@@ -2254,8 +2325,68 @@ function renderAnalytics(){
     <div style="display:flex;gap:16px;font-size:11px;color:var(--text-3);margin-top:8px">
       <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:linear-gradient(90deg,#818cf8,#a5b4fc);border-radius:2px;display:inline-block"></span>Revenue</span>
       <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:var(--green);border-radius:2px;display:inline-block"></span>Commission (49.95% / 55%)</span>
+      <span>📄 = from the pay stubs (no app records)</span>
     </div>`;
 }
+// ══ PAY STUB CHARTS ══
+function stubMonths(){
+  const m={};
+  (DB.payPeriods||[]).forEach(p=>{
+    if(!p.paystub || p.paystub.gross==null) return;
+    const ym=p.start.slice(0,7); m[ym]=m[ym]||{ym, sales:0, comm:0, tips:0, net:0, n:0};
+    const s=p.paystub; m[ym].sales+=s.salesEst||0; m[ym].comm+=s.commissionTotal||0; m[ym].tips+=s.cardTips||0; m[ym].net+=s.net||0; m[ym].n++;
+  });
+  return Object.values(m).sort((a,b)=>a.ym.localeCompare(b.ym));
+}
+function barChartSVG(elId, rows, key, color, refLine){
+  const el=document.getElementById(elId); if(!el) return;
+  if(!rows.length){ el.innerHTML='<div style="font-size:12px;color:var(--text-3);padding:8px 0">No pay stubs yet — import them in Settings.</div>'; return; }
+  const W=Math.max(el.clientWidth||600,300), H=150, padL=44, padB=22, padT=8;
+  const raw=Math.max(...rows.map(r=>r[key]), refLine||0)*1.05 || 1;
+  const p10=Math.pow(10,Math.floor(Math.log10(raw/4))); const step=[1,2,2.5,5,10].map(m=>m*p10).find(v=>raw/v<=4)||p10*10;
+  const max=Math.ceil(raw/step)*step;
+  const n=rows.length, slot=(W-padL-4)/n, bw=Math.max(2, Math.min(22, slot-2));
+  const y=v=>padT+(H-padT-padB)*(1-v/max);
+  const ticks=[]; for(let t=0;t<=max+0.001;t+=step) ticks.push(t);
+  const MS3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let svg=`<svg width="${W}" height="${H}" style="display:block;font-family:inherit">`;
+  ticks.forEach(t=>{ svg+=`<line x1="${padL}" x2="${W}" y1="${y(t)}" y2="${y(t)}" stroke="var(--border)" stroke-width="1"/><text x="${padL-6}" y="${y(t)+3}" text-anchor="end" font-size="10" fill="var(--text-3)">$${t>=1000?(t/1000).toFixed(t%1000?1:0)+'k':t}</text>`; });
+  if(refLine) svg+=`<line x1="${padL}" x2="${W}" y1="${y(refLine)}" y2="${y(refLine)}" stroke="var(--text-2)" stroke-width="1" stroke-dasharray="4 3"/>`;
+  rows.forEach((r,i)=>{
+    const x=padL+i*slot+(slot-bw)/2, v=r[key], top=y(v), h=Math.max(0,y(0)-top);
+    const rad=Math.min(4,bw/2,h);
+    svg+=`<path d="M${x},${y(0)} V${top+rad} Q${x},${top} ${x+rad},${top} H${x+bw-rad} Q${x+bw},${top} ${x+bw},${top+rad} V${y(0)} Z" fill="${color}"/>`;
+    svg+=`<rect x="${padL+i*slot}" y="${padT}" width="${slot}" height="${H-padT-padB}" fill="transparent" data-i="${i}" class="hit"/>`;
+    const [yy,mm]=r.ym.split('-');
+    if(mm==='01' || (i===0 && !rows.slice(1,4).some(x=>x.ym.endsWith('-01')))) svg+=`<text x="${x+bw/2}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--text-3)">${mm==='01'?yy:MS3[+mm-1]+' '+yy.slice(2)}</text>`;
+  });
+  svg+='</svg><div class="stub-tip" style="display:none;position:absolute;pointer-events:none;background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:6px 9px;font-size:11.5px;box-shadow:0 4px 14px rgba(0,0,0,.08);white-space:nowrap;z-index:5"></div>';
+  el.innerHTML=svg;
+  const tip=el.querySelector('.stub-tip');
+  el.querySelectorAll('.hit').forEach(h=>{
+    const show=e=>{
+      const r=rows[+h.dataset.i], [yy,mm]=r.ym.split('-');
+      tip.innerHTML=`<b>${MS3[+mm-1]} ${yy}</b>${r.n<2?' <span style="color:var(--text-3)">(1 stub)</span>':''}<br>Sales $${fmt(r.sales)}<br>Commission $${fmt(r.comm)}<br>Card tips $${fmt(r.tips)} · ${r.sales?(r.tips/r.sales*100).toFixed(1):'—'}%`;
+      tip.style.display='';
+      const bx=+h.getAttribute('x'); tip.style.left=Math.min(bx+8, W-170)+'px'; tip.style.top='4px';
+      h.parentNode.querySelectorAll('.hit').forEach(o=>o.setAttribute('fill','transparent')); h.setAttribute('fill','rgba(0,0,0,.04)');
+    };
+    h.addEventListener('mouseenter',show); h.addEventListener('touchstart',show,{passive:true});
+    h.addEventListener('mouseleave',()=>{ tip.style.display='none'; h.setAttribute('fill','transparent'); });
+  });
+}
+function renderStubCharts(){
+  let rows=stubMonths();
+  const r=(document.getElementById('stubRange')||{}).value||'24';
+  if(r!=='all') rows=rows.slice(-(+r));
+  barChartSVG('stubSalesChart', rows, 'sales', '#818cf8', 10000);
+  barChartSVG('stubTipsChart', rows, 'tips', '#34d399');
+  const t=document.getElementById('stubTable');
+  if(t) t.innerHTML=`<table class="tbl" style="font-size:12px"><thead><tr><th>Month</th><th>Sales</th><th>Commission</th><th>Card tips</th><th>Tip %</th><th>Net pay</th></tr></thead><tbody>`+
+    rows.slice().reverse().map(m=>`<tr><td>${m.ym}${m.n<2?' *':''}</td><td class="mono">$${fmt(m.sales)}</td><td class="mono">$${fmt(m.comm)}</td><td class="mono">$${fmt(m.tips)}</td><td class="mono">${m.sales?(m.tips/m.sales*100).toFixed(1)+'%':'—'}</td><td class="mono">$${fmt(m.net)}</td></tr>`).join('')+
+    '</tbody></table><div style="font-size:11px;color:var(--text-3);margin-top:4px">* only one pay stub that month</div>';
+}
+
 // ══ IMPORT: Fresha appointments / pay stubs ══
 function readImportFile(e, fn){
   const f=e.target.files[0]; if(!f) return; e.target.value='';
