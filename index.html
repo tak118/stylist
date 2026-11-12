@@ -404,7 +404,7 @@ input:-webkit-autofill:focus {
               <input type="checkbox" id="discResidence" onchange="applyDiscount()" style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;margin-top:1px;flex-shrink:0">
               <div>
                 <div style="font-size:13.5px;font-weight:600;color:var(--text)">Residence Discount — 20% off</div>
-                <div style="font-size:11.5px;color:var(--text-3)">Colour &amp; Perm only. For cuts, choose the “… Resident Discount” menu (already discounted).</div>
+                <div style="font-size:11.5px;color:var(--text-3)">Tick each service that gets 20% off (Colour &amp; Perm are ticked first). For cuts, choose the “… Resident Discount” menu.</div>
               </div>
             </label>
           </div>
@@ -891,7 +891,7 @@ let apptProducts = [];
 let productOnlyItems = [];
 let amountManualOverride = false; // true when user has manually edited Amount
 let listManual = false;            // true when user has manually edited "Price before discount"
-const APP_VERSION = '2.2 (2026-11-12)';
+const APP_VERSION = '2.3 (2026-11-12)';
 
 // ══ FIREBASE SYNC with Email/Password Auth ══
 // Only Tak's own account can read/write (Firebase rules check the uid).
@@ -1738,7 +1738,7 @@ function clearForm(){
   document.getElementById('discResult').style.display='none';
   document.getElementById('discResetWrap').style.display='none';
   document.getElementById('amountOverrideNote').style.display='none';
-  amountManualOverride=false; listManual=false;
+  amountManualOverride=false; listManual=false; resiPick={};
   apptProducts=[];
   if(document.getElementById('apptProductList')) renderApptProducts();
   selectedSvcs=[];
@@ -2477,6 +2477,9 @@ function resetAmountOverride(){
   if(discOn) applyDiscount(); else calcTip();
 }
 
+// Residence 20%: chosen per service (ticks). Colour & Perm are ticked at first; anything can be ticked/unticked.
+let resiPick = {};
+function toggleResi(name, on){ resiPick[name]=on; applyDiscount(); }
 function applyDiscount() {
   // If user manually set a custom amount, skip override
   if (amountManualOverride) { calcTip(); return; }
@@ -2484,75 +2487,47 @@ function applyDiscount() {
   const studentOn   = document.getElementById('discStudent').checked;
   const residenceOn = document.getElementById('discResidence').checked;
   const resultEl    = document.getElementById('discResult');
+  const fdate       = document.getElementById('fDate').value;
 
-  if (!selectedSvcs.length) {
-    resultEl.style.display = 'none';
-    return;
-  }
+  if (!selectedSvcs.length) { resultEl.style.display = 'none'; return; }
 
-  // Check student eligibility: date must be Mon or Wed
-  const dateVal = document.getElementById('fDate').value;
-  const dayOfWeek = dateVal ? new Date(dateVal + 'T12:00:00').getDay() : -1; // 1=Mon, 3=Wed
+  const dayOfWeek = fdate ? new Date(fdate + 'T12:00:00').getDay() : -1; // 1=Mon, 3=Wed
   const isMonWed = dayOfWeek === 1 || dayOfWeek === 3;
 
-  let lines = [];
-  let totalOriginal = 0;
-  let totalDiscounted = 0;
-
+  let lines = [], totalOriginal = 0, totalDiscounted = 0;
   selectedSvcs.forEach(name => {
-    const price = priceOf(name, dateVal);
+    const price = priceOf(name, fdate);
     totalOriginal += price;
-
-    let discountedPrice = price;
-    let discLabel = '';
-
+    let discounted = price, label = '';
     if (studentOn && svcIs(name, STUDENT_ELIGIBLE)) {
-      if (isMonWed) {
-        discountedPrice = price * 0.90;
-        discLabel = ' −10% student';
-      } else {
-        discLabel = ' ⚠️ Student only Mon/Wed';
-      }
-    } else if (residenceOn && residenceEligible(name)) {
-      discountedPrice = price * 0.80;
-      discLabel = ' −20% residence';
-    } else if (residenceOn && svcCat(name)==='Cut' && !/resident/i.test(name)) {
-      discLabel = ' ⚠️ choose the Resident Discount menu instead';
+      if (isMonWed) { discounted = price * 0.90; label = '−10% student'; }
+      else label = '⚠️ Student only Mon/Wed';
+      lines.push(`<div>${name}: $${price} → $${discounted.toFixed(2)} ${label}</div>`);
+    } else if (residenceOn) {
+      const on = (name in resiPick) ? resiPick[name] : residenceEligible(name);
+      if (on) discounted = price * 0.80;
+      const warn = !on && svcCat(name)==='Cut' && !/resident/i.test(name) ? ' <span style="color:var(--amber);font-weight:500">⚠️ for cuts, choose the Resident Discount menu</span>' : '';
+      lines.push(`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:${on?600:500};color:${on?'var(--green)':'var(--text-2)'}">
+        <input type="checkbox" ${on?'checked':''} onchange="toggleResi('${name.replace(/'/g,"\\'")}',this.checked)" style="accent-color:var(--green)">
+        ${name}: $${price}${on?` → $${discounted.toFixed(2)} −20%`:''}${warn}</label>`);
     }
-
-    totalDiscounted += discountedPrice;
-    if (discLabel) lines.push(`${name}: $${price} → $${discountedPrice.toFixed(2)}${discLabel}`);
+    totalDiscounted += discounted;
   });
-
-  const saved = totalOriginal - totalDiscounted;
 
   if (!studentOn && !residenceOn) {
     resultEl.style.display = 'none';
-    // Restore original total
-    const orig = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0));
-    document.getElementById('fAmount').value = orig;
+    document.getElementById('fAmount').value = round2(totalOriginal);
     calcTip();
     return;
   }
-
-  if (lines.length === 0) {
-    resultEl.style.display = '';
-    resultEl.innerHTML = `<span style="color:var(--amber)">⚠️ Selected services are not eligible for this discount</span>`;
-    const orig = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0));
-    document.getElementById('fAmount').value = orig;
-    calcTip();
-    return;
-  }
-
-  // Apply discounted amount
   document.getElementById('fAmount').value = totalDiscounted.toFixed(2);
   calcTip();
-
+  const saved = totalOriginal - totalDiscounted;
   resultEl.style.display = '';
-  resultEl.innerHTML = lines.map(l=>`<div>${l}</div>`).join('') +
-    `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #a7f3d0;font-weight:700">
-      Total: $${totalOriginal} → $${totalDiscounted.toFixed(2)} 
-      <span style="color:var(--green)">(−$${saved.toFixed(2)} saved)</span>
+  resultEl.innerHTML = (residenceOn ? '<div style="font-size:11.5px;color:var(--text-3);font-weight:500;margin-bottom:4px">Tick the services that get 20% off:</div>' : '')
+    + (lines.join('') || '<div style="color:var(--amber)">⚠️ Selected services are not eligible for this discount</div>')
+    + `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #a7f3d0;font-weight:700">
+      Total: $${round2(totalOriginal)} → $${totalDiscounted.toFixed(2)} ${saved>0?`<span style="color:var(--green)">(−$${saved.toFixed(2)})</span>`:''}
     </div>`;
 }
 
