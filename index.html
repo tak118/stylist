@@ -346,7 +346,7 @@ input:-webkit-autofill:focus {
       <div class="card-header"><span class="card-title">Appointment Details</span></div>
       <div class="card-body" style="padding:24px">
         <div class="form-grid" style="grid-template-columns:1fr 1fr;margin-bottom:16px">
-          <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="fDate"></div>
+          <div class="form-group"><label class="form-label">Date</label><input class="form-input" type="date" id="fDate" onchange="buildPicker(document.getElementById('svcSearch').value);if(selectedSvcs.length&&!amountManualOverride)updateSvcChips()"></div>
           <div class="form-group" style="position:relative">
             <label class="form-label">Client Name</label>
             <input class="form-input" type="text" id="fClient" placeholder="e.g. Sarah K." autocomplete="off"
@@ -566,6 +566,20 @@ input:-webkit-autofill:focus {
       <div class="card-body" style="padding:20px"><div id="accountUI"></div><div style="font-size:11px;color:var(--text-3);margin-top:12px" id="appVersion"></div></div>
     </div>
     <div class="card">
+      <div class="card-header"><span class="card-title">💲 Price List (Fresha)</span></div>
+      <div class="card-body" style="padding:20px">
+        <div style="font-size:12.5px;color:var(--text-2);line-height:1.7;margin-bottom:12px">
+          Import <b>Tak料金表_….csv</b> as many times as you like. Each price keeps its “from” date, so old records keep their old prices.<br>
+          Menu names follow Fresha. Old app names are kept as “Old name”, so past records still match.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('priceFile').click()">Import price list CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="exportPriceList()">Export price list CSV</button>
+          <input type="file" id="priceFile" accept=".csv,text/csv" style="display:none" onchange="readPriceFile(event)">
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-header"><span class="card-title">Service Menu</span></div>
       <div class="card-body" style="padding:20px">
         <div id="serviceListUI"></div>
@@ -719,6 +733,20 @@ input:-webkit-autofill:focus {
 </div>
 
 <div class="toast" id="toast"></div>
+<!-- PRICE LIST IMPORT MODAL -->
+<div class="overlay" id="priceModal">
+  <div class="modal-box" style="max-width:860px">
+    <div class="modal-header"><div class="modal-title">Import price list — check before saving</div><button class="close-btn" onclick="closePriceModal()">✕</button></div>
+    <div class="modal-body" style="padding:16px;overflow-x:auto" id="priceModalBody"></div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <span style="font-size:12px;color:var(--text-3)" id="priceModalSum"></span>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-sm" onclick="closePriceModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="applyPriceImport()">Save prices</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- EDIT PRODUCT SALE MODAL -->
 <div class="overlay" id="editProductModal">
@@ -863,7 +891,7 @@ let apptProducts = [];
 let productOnlyItems = [];
 let amountManualOverride = false; // true when user has manually edited Amount
 let listManual = false;            // true when user has manually edited "Price before discount"
-const APP_VERSION = '2.0.1 (2026-11-12)';
+const APP_VERSION = '2.1 (2026-11-12)';
 
 // ══ FIREBASE SYNC with Email/Password Auth ══
 // Only Tak's own account can read/write (Firebase rules check the uid).
@@ -1157,10 +1185,30 @@ function getFormDate(){
 function fmt(n){ return Number(n).toFixed(2); }
 function fmtDate(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{timeZone:'America/Vancouver',month:'short',day:'numeric'}); }
 function initials(n){ return n.trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase()||'?'; }
-function svcCat(name){ return (DB.services.find(s=>s.name===name)||{}).category||'Other'; }
+// A service is found by its current name or by an old name (aliases) — old records keep old names
+function findSvc(name){ return DB.services.find(s=>s.name===name) || DB.services.find(s=>(s.aliases||[]).includes(name)); }
+// Price of a service on a date: the newest price whose "from" date is on/before that date
+function priceOf(name, date){
+  const s=findSvc(name); if(!s) return 0;
+  const d=date||todayStr();
+  const hit=(s.prices||[]).filter(p=>p.from<=d).sort((a,b)=>b.from.localeCompare(a.from))[0];
+  return hit ? +hit.price : (+s.defaultPrice||0);
+}
+function priceInfo(name, date){
+  const s=findSvc(name)||{}; const d=date||todayStr();
+  const hit=(s.prices||[]).filter(p=>p.from<=d).sort((a,b)=>b.from.localeCompare(a.from))[0];
+  return hit ? {price:+hit.price, isFrom:!!hit.isFrom, from:hit.from} : {price:+s.defaultPrice||0, isFrom:false, from:null};
+}
+function durOf(name){ return (findSvc(name)||{}).duration||0; }
+function isBang(name){ return (name||'').startsWith(BANG_SVC_NAME); }
+function svcIs(name, list){
+  const s=findSvc(name);
+  return list.includes(name) || !!(s && (list.includes(s.name) || (s.aliases||[]).some(a=>list.includes(a))));
+}
+function svcCat(name){ return (findSvc(name)||{}).category||'Other'; }
 // For analytics: use parentCategory if set (Add-on rolls up to parent)
 function svcEffectiveCat(name){
-  const s = DB.services.find(x=>x.name===name)||{};
+  const s = findSvc(name)||{};
   return s.parentCategory || s.category || 'Other';
 }
 function monthRecords(){
@@ -1224,12 +1272,12 @@ function round2(n){ return Math.round((+n||0)*100)/100; }
 function recSvcs(r){ return r.services && r.services.length ? r.services : (r.service ? [r.service] : []); }
 // Price used to split one amount across several services (Bang = 0 in the full-tip era)
 function splitPrice(name, date){
-  if(name===BANG_SVC_NAME && (date||'') <= BANG_FULLTIP_UNTIL) return 0;
-  return (DB.services.find(x=>x.name===name)||{}).defaultPrice||0;
+  if(isBang(name) && (date||'') <= BANG_FULLTIP_UNTIL) return 0;
+  return priceOf(name, date);
 }
 function isExcluded(name, date){
-  if(COMMISSION_EXCLUDED.includes(name)) return true;
-  return name===BANG_SVC_NAME && (date||'') <= BANG_FULLTIP_UNTIL;
+  if(svcIs(name, COMMISSION_EXCLUDED)) return true;
+  return isBang(name) && (date||'') <= BANG_FULLTIP_UNTIL;
 }
 // Commission rate based on MONTHLY service revenue — the whole month at one rate
 // $0-$10,000 = 49.95%, over $10,000 = 55%
@@ -1385,7 +1433,19 @@ function migrateV2(){
   return true;
 }
 function ensureMigrated(){
-  if(migrateV2()){ save(); refreshAllViews(); toast('✓ Data updated to the new format'); }
+  const a=migrateV2(), b=linkOrphanNames();
+  if(a||b){ save(); refreshAllViews(); }
+  if(a) toast('✓ Data updated to the new format');
+}
+function linkOrphanNames(){
+  let changed=false;
+  const used=new Set(); DB.records.forEach(r=>recSvcs(r).forEach(n=>used.add(n)));
+  used.forEach(n=>{
+    if(!n || n==='Adjustment' || findSvc(n)) return;
+    const t=DB.services.filter(s=>s.name.startsWith(n+' '));
+    if(t.length===1){ t[0].aliases=[...new Set([...(t[0].aliases||[]), n])]; changed=true; }
+  });
+  return changed;
 }
 
 // ══ DASHBOARD ══
@@ -1448,27 +1508,29 @@ function renderDashboard(){
 
 // ══ SERVICE PICKER (multi-select) ══
 function buildPicker(filter=''){
-  const cats={};
+  const date=document.getElementById('fDate').value||todayStr();
+  const cats={}, old=[];
   DB.services.forEach(s=>{
-    if(filter&&!s.name.toLowerCase().includes(filter.toLowerCase())&&!s.category.toLowerCase().includes(filter.toLowerCase()))return;
-    if(!cats[s.category])cats[s.category]=[];
-    cats[s.category].push(s);
+    if(s.hidden) return;
+    if(filter&&!s.name.toLowerCase().includes(filter.toLowerCase())&&!(s.category||'').toLowerCase().includes(filter.toLowerCase()))return;
+    if(!(s.prices||[]).length && DB.services.some(x=>(x.prices||[]).length)){ old.push(s); return; }
+    const c=s.category||'Other'; if(!cats[c])cats[c]=[]; cats[c].push(s);
   });
-  document.getElementById('svcPicker').innerHTML=Object.entries(cats).map(([cat,svcs])=>`
-    <div class="svc-cat-hd">${cat}</div>
-    ${svcs.map(s=>{
-      const sel=selectedSvcs.includes(s.name);
-      return `<div class="svc-row${sel?' selected':''}" onclick="toggleSvc('${s.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
-        <div><div class="svc-row-name">${s.name}</div><div class="svc-row-meta">${s.duration} min</div></div>
+  const row=s=>{
+    const on=selectedSvcs.includes(s.name), pi=priceInfo(s.name,date);
+    return `<div class="svc-row${on?' selected':''}" onclick="toggleSvc('${s.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
+        <div><div class="svc-row-name">${s.name}</div><div class="svc-row-meta">${s.duration||'?'} min</div></div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="svc-row-price">$${s.defaultPrice}</div>
-          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'white'};display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s">
-            ${sel?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
+          <div class="svc-row-price">${pi.isFrom?'<span style="font-size:10px;font-weight:500;color:var(--text-3)">from </span>':''}$${pi.price}</div>
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'white'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            ${on?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
           </div>
         </div>
       </div>`;
-    }).join('')}
-  `).join('')||'<div style="padding:16px;color:var(--text-3);font-size:13px">No results</div>';
+  };
+  document.getElementById('svcPicker').innerHTML=(Object.entries(cats).map(([cat,svcs])=>`<div class="svc-cat-hd">${cat}</div>${svcs.map(row).join('')}`).join('')
+    + (old.length?`<div class="svc-cat-hd" style="color:var(--text-3)">Old menu (not in the price list)</div>${old.map(row).join('')}`:''))
+    ||'<div style="padding:16px;color:var(--text-3);font-size:13px">No results</div>';
 }
 
 function filterSvc(v){ buildPicker(v); }
@@ -1498,7 +1560,7 @@ function updateSvcChips(){
   badge.style.display='';
 
   chips.innerHTML=selectedSvcs.map(name=>{
-    const s=DB.services.find(x=>x.name===name)||{};
+    const s=findSvc(name)||{};
     const cat=s.category||'Other';
     return `<span class="svc-chip badge-${cat}" style="background:var(--accent-soft);color:var(--accent);border:1.5px solid #c7d2fe">
       ${name}
@@ -1507,8 +1569,9 @@ function updateSvcChips(){
   }).join('');
 
   // Auto-calculate total price and duration
-  const totalPrice=selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
-  const totalDur=selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).duration||0),0);
+  const fd=document.getElementById('fDate').value;
+  const totalPrice=round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,fd),0));
+  const totalDur=selectedSvcs.reduce((s,n)=>s+durOf(n),0);
   document.getElementById('fAmount').value=totalPrice;
   document.getElementById('fDuration').value=totalDur;
   autoTotal.style.display='';
@@ -1763,27 +1826,29 @@ function closeEditModal(){
 
 // ── Edit Modal Service Picker ──
 function buildEFPicker(filter=''){
-  const cats={};
+  const date=document.getElementById('eFDate').value||todayStr();
+  const cats={}, old=[];
   DB.services.forEach(s=>{
-    if(filter&&!s.name.toLowerCase().includes(filter.toLowerCase())&&!s.category.toLowerCase().includes(filter.toLowerCase()))return;
-    if(!cats[s.category])cats[s.category]=[];
-    cats[s.category].push(s);
+    if(s.hidden) return;
+    if(filter&&!s.name.toLowerCase().includes(filter.toLowerCase())&&!(s.category||'').toLowerCase().includes(filter.toLowerCase()))return;
+    if(!(s.prices||[]).length && DB.services.some(x=>(x.prices||[]).length)){ old.push(s); return; }
+    const c=s.category||'Other'; if(!cats[c])cats[c]=[]; cats[c].push(s);
   });
-  document.getElementById('eFSvcPicker').innerHTML=Object.entries(cats).map(([cat,svcs])=>`
-    <div class="svc-cat-hd">${cat}</div>
-    ${svcs.map(s=>{
-      const sel=eFSvcs.includes(s.name);
-      return `<div class="svc-row${sel?' selected':''}" onclick="toggleEFSvc('${s.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
-        <div><div class="svc-row-name">${s.name}</div><div class="svc-row-meta">${s.duration} min</div></div>
+  const row=s=>{
+    const on=eFSvcs.includes(s.name), pi=priceInfo(s.name,date);
+    return `<div class="svc-row${on?' selected':''}" onclick="toggleEFSvc('${s.name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">
+        <div><div class="svc-row-name">${s.name}</div><div class="svc-row-meta">${s.duration||'?'} min</div></div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="svc-row-price">$${s.defaultPrice}</div>
-          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'white'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            ${sel?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
+          <div class="svc-row-price">${pi.isFrom?'<span style="font-size:10px;font-weight:500;color:var(--text-3)">from </span>':''}$${pi.price}</div>
+          <div style="width:20px;height:20px;border-radius:50%;border:2px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'white'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            ${on?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
           </div>
         </div>
       </div>`;
-    }).join('')}
-  `).join('')||'<div style="padding:16px;color:var(--text-3);font-size:13px">No results</div>';
+  };
+  document.getElementById('eFSvcPicker').innerHTML=(Object.entries(cats).map(([cat,svcs])=>`<div class="svc-cat-hd">${cat}</div>${svcs.map(row).join('')}`).join('')
+    + (old.length?`<div class="svc-cat-hd" style="color:var(--text-3)">Old menu (not in the price list)</div>${old.map(row).join('')}`:''))
+    ||'<div style="padding:16px;color:var(--text-3);font-size:13px">No results</div>';
 }
 
 function filterEFSvc(v){ buildEFPicker(v); }
@@ -1802,14 +1867,15 @@ function updateEFSvcChips(){
   if(!eFSvcs.length){ chips.innerHTML=''; badge.style.display='none'; return; }
   badge.textContent=eFSvcs.length; badge.style.display='';
   chips.innerHTML=eFSvcs.map(name=>{
-    const s=DB.services.find(x=>x.name===name)||{};
+    const s=findSvc(name)||{};
     return `<span class="svc-chip badge-${s.category||'Other'}" style="background:var(--accent-soft);color:var(--accent);border:1.5px solid #c7d2fe">
       ${name}<span class="svc-chip-remove" onclick="toggleEFSvc('${name.replace(/'/g,"\\'")}')">×</span></span>`;
   }).join('');
   // Auto-update amount if not overridden
   if(!eFAmountOverride){
-    const total=eFSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
-    const dur=eFSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).duration||0),0);
+    const ed=document.getElementById('eFDate').value;
+    const total=round2(eFSvcs.reduce((s,n)=>s+priceOf(n,ed),0));
+    const dur=eFSvcs.reduce((s,n)=>s+durOf(n),0);
     document.getElementById('eFAmount').value=total;
     document.getElementById('eFDuration').value=dur;
     calcEFTip();
@@ -1824,7 +1890,7 @@ function onEFAmountEdit(){
 // (was the Total Sale tip calculator) keeps "before discount" in sync with the services
 function calcEFTip(){
   if(!eFListManual){
-    document.getElementById('eFListPrice').value = eFSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+    document.getElementById('eFListPrice').value = round2(eFSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('eFDate').value),0));
   }
   const k=document.getElementById('eFKind').value;
   if(k==='fulltip'||k==='noshow') document.getElementById('eFAmount').value=0;
@@ -2158,6 +2224,133 @@ function renderAnalytics(){
       <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:8px;background:var(--green);border-radius:2px;display:inline-block"></span>Commission (49.95% / 55%)</span>
     </div>`;
 }
+// ══ PRICE LIST (CSV import / export) ══
+function parseCSV(text){
+  text=text.replace(/^﻿/,'');
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
+    else f+=c;
+  }
+  if(f!==''||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+function csvCell(v){ v=v==null?'':String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function normTokens(t){ return new Set((t||'').toLowerCase().replace(/[·\-\/()&+,.$']/g,' ').split(/\s+/).filter(Boolean)); }
+function parseDur(t){
+  t=(t||'').split(/[〜~]/)[0]; let m=0;
+  const h=t.match(/(\d+)\s*h/); if(h) m+=60*+h[1];
+  const mi=t.match(/(\d+)\s*min/); if(mi) m+=+mi[1];
+  return m||null;
+}
+function parseSince(t){
+  const m=(t||'').match(/(\d{4})-(\d{1,2})(?:-(\d{1,2}))?/);
+  return m ? `${m[1]}-${m[2].padStart(2,'0')}-${(m[3]||'1').padStart(2,'0')}` : null;
+}
+function guessCat(name){
+  const n=name.toLowerCase();
+  if(n.startsWith('add on')) return 'Add-on';
+  if(/consult/.test(n)) return 'Other';
+  if(/tint|colour|color|highlight|balayage|blond|gloss|lights/.test(n)) return 'Colour';
+  if(/perm|straighten/.test(n)) return 'Perm';
+  if(/keratin|treatment|anti chute|scalp|pcc/.test(n)) return 'Treatment';
+  if(/blow|bd /.test(n)) return 'Styling';
+  return 'Cut';
+}
+let priceRows=[];
+function readPriceFile(e){
+  const f=e.target.files[0]; if(!f) return; e.target.value='';
+  const rd=new FileReader();
+  rd.onload=ev=>{ try{ openPriceModal(parseCSV(ev.target.result)); }catch(err){ toast('⚠️ Could not read the CSV'); } };
+  rd.readAsText(f,'utf-8');
+}
+function openPriceModal(rows){
+  const hd=rows[0].map(h=>h.trim().toLowerCase());
+  const col=(...names)=>hd.findIndex(h=>names.includes(h));
+  const iName=col('メニュー','menu','service'), iPrice=col('料金','price'), iFrom=col('from'), iDur=col('所要時間','duration'), iSince=col('いつから','since','valid from'), iNote=col('どこで確かめたか','note');
+  if(iName<0||iPrice<0){ toast('⚠️ CSV needs columns メニュー and 料金'); return; }
+  const claimed=new Set();
+  priceRows=rows.slice(1).map(r=>{
+    const name=(r[iName]||'').trim(), rawPrice=(r[iPrice]||'').trim(), fromTxt=(iFrom>=0?r[iFrom]:'').trim();
+    const row={name, rawPrice, price:parseFloat(rawPrice), isFrom:/from/i.test(fromTxt), free:/free/i.test(fromTxt),
+      dur:parseDur(iDur>=0?r[iDur]:''), since:parseSince(iSince>=0?r[iSince]:'')||'2026-09-01', sinceRaw:(iSince>=0?r[iSince]:''), note:(iNote>=0?r[iNote]:'').trim()};
+    if(row.free && isNaN(row.price)) row.price=0;
+    row.skip = !name || isNaN(row.price) || /%/.test(rawPrice);
+    return row;
+  });
+  // default matches: exact name/old name first, then "app name words ⊆ Fresha words, at most 1 extra word"
+  priceRows.forEach(row=>{
+    if(row.skip) return;
+    const ex=DB.services.find(s=>s.name===row.name)||DB.services.find(s=>(s.aliases||[]).includes(row.name));
+    if(ex){ row.target=ex.name; claimed.add(ex.name); }
+  });
+  priceRows.forEach(row=>{
+    if(row.skip||row.target!==undefined) return;
+    const F=normTokens(row.name); let best=null, bestD=9;
+    DB.services.forEach(s=>{
+      if(claimed.has(s.name)) return;
+      const A=normTokens(s.name); if(![...A].every(t=>F.has(t))) return;
+      const d=F.size-A.size; if(d<=1 && d<bestD){ best=s; bestD=d; }
+    });
+    if(best){ row.target=best.name; claimed.add(best.name); } else row.target='';
+    row.cat=guessCat(row.name);
+  });
+  renderPriceModal();
+  document.getElementById('priceModal').classList.add('open');
+}
+function renderPriceModal(){
+  const opts=t=>`<option value="">＋ New service</option>`+DB.services.map(s=>`<option value="${s.name.replace(/"/g,'&quot;')}"${s.name===t?' selected':''}>${s.name}</option>`).join('');
+  const cats=['Cut','Colour','Treatment','Perm','Styling','Add-on','Other'];
+  document.getElementById('priceModalBody').innerHTML=`<table class="tbl" style="font-size:12.5px"><thead><tr><th>Fresha menu</th><th>Price</th><th>From</th><th>Same as (app menu)</th><th>Category</th></tr></thead><tbody>`+
+    priceRows.map((r,i)=>r.skip?`<tr style="color:var(--text-3)"><td>${r.name}</td><td>${r.rawPrice}</td><td colspan="3">Skipped (not a menu price)</td></tr>`:
+    `<tr><td style="font-weight:600">${r.name}</td>
+      <td class="mono" style="white-space:nowrap">${r.isFrom?'from ':''}$${r.price}</td>
+      <td><input class="form-input" type="date" style="padding:4px 6px;font-size:12px;width:130px" value="${r.since}" onchange="priceRows[${i}].since=this.value"></td>
+      <td><select class="form-select" style="padding:4px 6px;font-size:12px;max-width:240px" onchange="priceRows[${i}].target=this.value;renderPriceModal()">${opts(r.target)}</select>
+        ${r.target&&r.target!==r.name?`<div style="font-size:10.5px;color:var(--text-3)">renamed to the Fresha name (old name kept)</div>`:''}</td>
+      <td>${r.target?'<span style="color:var(--text-3)">'+(findSvc(r.target)||{}).category+'</span>':`<select class="form-select" style="padding:4px 6px;font-size:12px" onchange="priceRows[${i}].cat=this.value">${cats.map(c=>`<option${c===r.cat?' selected':''}>${c}</option>`).join('')}</select>`}</td>
+    </tr>`).join('')+'</tbody></table>';
+  const use=priceRows.filter(r=>!r.skip);
+  document.getElementById('priceModalSum').textContent=`${use.length} prices · ${use.filter(r=>r.target).length} matched · ${use.filter(r=>!r.target).length} new · ${priceRows.length-use.length} skipped`;
+}
+function closePriceModal(){ document.getElementById('priceModal').classList.remove('open'); priceRows=[]; }
+function applyPriceImport(){
+  priceRows.forEach(r=>{
+    if(r.skip) return;
+    let s=r.target ? DB.services.find(x=>x.name===r.target) : DB.services.find(x=>x.name===r.name);
+    if(!s){ s={name:r.name, category:r.cat||guessCat(r.name), duration:r.dur||60, defaultPrice:r.price, prices:[]}; DB.services.push(s); }
+    if(s.name!==r.name){
+      const other=DB.services.find(x=>x!==s && x.name===r.name);
+      if(!other){ s.aliases=[...new Set([...(s.aliases||[]), s.name])]; s.name=r.name; }
+    }
+    if(!s.prices) s.prices=[];
+    s.prices=s.prices.filter(p=>p.from!==r.since);
+    s.prices.push({from:r.since, price:r.price, isFrom:r.isFrom, note:r.note});
+    s.prices.sort((a,b)=>a.from.localeCompare(b.from));
+    if(r.dur) s.duration=r.dur;
+    if(s.defaultPrice==null) s.defaultPrice=r.price;
+    s.hidden=undefined;
+  });
+  const n=priceRows.filter(r=>!r.skip).length;
+  closePriceModal(); save(); renderSettings(); toast(`✓ ${n} prices saved`);
+}
+function priceHistory(s){
+  const ps=(s.prices||[]); if(!ps.length) return '';
+  const parts=ps.map(p=>`${p.from}: ${p.isFrom?'from ':''}$${p.price}`);
+  if(s.defaultPrice!=null && ps[0].price!==+s.defaultPrice) parts.unshift(`before: $${s.defaultPrice}`);
+  return `<div style="font-size:11px;color:var(--text-3)">${parts.join(' → ')}</div>`;
+}
+function exportPriceList(){
+  const lines=[['メニュー','料金','from','所要時間','いつから','どこで確かめたか'].join(',')];
+  DB.services.forEach(s=>(s.prices||[]).forEach(p=>lines.push([s.name,p.price,p.isFrom?'from':'',s.duration?s.duration+'min':'',p.from,p.note||''].map(csvCell).join(','))));
+  const b=new Blob(['﻿'+lines.join('\n')],{type:'text/csv'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(b); a.download=`price-list-${todayStr()}.csv`; a.click();
+}
+
 // ══ SETTINGS ══
 function renderSettings(){
   renderAccount();
@@ -2168,7 +2361,8 @@ function renderSettings(){
       ${svcs.map(s=>`
         <div id="svcRow_${s.idx}" style="background:var(--bg);border-radius:var(--radius-sm);margin-bottom:4px;overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px">
-            <div><span style="font-size:13px;font-weight:600">${s.name}</span><span style="font-size:12px;color:var(--text-3);margin-left:8px">$${s.defaultPrice} · ${s.duration||'?'}min${s.parentCategory?` · →${s.parentCategory}`:''}</span></div>
+            <div><span style="font-size:13px;font-weight:600${s.hidden?';color:var(--text-3);text-decoration:line-through':''}">${s.name}</span><span style="font-size:12px;color:var(--text-3);margin-left:8px">${priceInfo(s.name).isFrom?'from ':''}$${priceOf(s.name)} · ${s.duration||'?'}min${s.parentCategory?` · →${s.parentCategory}`:''}</span>
+              ${priceHistory(s)}${(s.aliases||[]).length?`<div style="font-size:11px;color:var(--text-3)">Old name: ${s.aliases.join(', ')}</div>`:''}</div>
             <div style="display:flex;gap:6px">
               <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px" onclick="toggleSvcEdit(${s.idx})">Edit</button>
               <button class="btn btn-danger" onclick="removeService(${s.idx})">Remove</button>
@@ -2177,7 +2371,10 @@ function renderSettings(){
           <div id="svcEdit_${s.idx}" style="display:none;padding:10px 12px;border-top:1px solid var(--border);background:white">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
               <div class="form-group" style="flex:2;min-width:120px"><label class="form-label">Name</label><input class="form-input" type="text" id="svcEditName_${s.idx}" value="${s.name}"></div>
-              <div class="form-group" style="width:80px"><label class="form-label">Price ($)</label><input class="form-input mono" type="number" id="svcEditPrice_${s.idx}" value="${s.defaultPrice}"></div>
+              <div class="form-group" style="width:80px"><label class="form-label">Price ($)</label><input class="form-input mono" type="number" step="0.01" id="svcEditPrice_${s.idx}" value="${priceOf(s.name)}"></div>
+              <div class="form-group" style="width:140px"><label class="form-label">Price from (date)</label><input class="form-input" type="date" id="svcEditFrom_${s.idx}" value="${todayStr()}"></div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:4px;padding-bottom:9px"><input type="checkbox" id="svcEditIsFrom_${s.idx}" ${priceInfo(s.name).isFrom?'checked':''}> “from” price</label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:4px;padding-bottom:9px"><input type="checkbox" id="svcEditHidden_${s.idx}" ${s.hidden?'checked':''}> Hide from menu</label>
               <div class="form-group" style="width:80px"><label class="form-label">Duration (min)</label><input class="form-input" type="number" id="svcEditDur_${s.idx}" value="${s.duration||60}"></div>
               ${s.category==='Add-on'?`<div class="form-group" style="width:120px"><label class="form-label">Parent Category</label>
                 <select class="form-select" id="svcEditParent_${s.idx}">
@@ -2205,8 +2402,17 @@ function saveSvcEdit(idx){
   const price=parseFloat(document.getElementById(`svcEditPrice_${idx}`).value)||0;
   const dur=parseInt(document.getElementById(`svcEditDur_${idx}`).value)||60;
   if(!name){toast('Name cannot be empty');return;}
-  DB.services[idx].name=name;
-  DB.services[idx].defaultPrice=price;
+  const s=DB.services[idx];
+  if(s.name!==name){ s.aliases=[...new Set([...(s.aliases||[]), s.name])].filter(a=>a!==name); s.name=name; }  // keep old name so old records still match
+  const from=document.getElementById(`svcEditFrom_${idx}`).value||todayStr();
+  const isFrom=document.getElementById(`svcEditIsFrom_${idx}`).checked;
+  if(price!==priceOf(name, from) || isFrom!==priceInfo(name, from).isFrom){
+    if(!s.prices) s.prices=[];
+    s.prices=s.prices.filter(p=>p.from!==from); s.prices.push({from, price, isFrom, note:'edited in app'});
+    s.prices.sort((a,b)=>a.from.localeCompare(b.from));
+  }
+  if(s.defaultPrice==null) s.defaultPrice=price;
+  s.hidden=document.getElementById(`svcEditHidden_${idx}`).checked || undefined;
   DB.services[idx].duration=dur;
   // Save parentCategory for Add-ons
   const parentEl=document.getElementById(`svcEditParent_${idx}`);
@@ -2219,7 +2425,7 @@ function addService(){
   const duration=parseInt(document.getElementById('newServiceDuration').value)||60;
   const category=document.getElementById('newServiceCat').value||'Other';
   if(!name){toast('Enter a service name');return;}
-  DB.services.push({name,defaultPrice:price,category,duration});
+  DB.services.push({name,defaultPrice:price,category,duration,prices:[{from:todayStr(),price,isFrom:false,note:'added in app'}]});
   save();
   document.getElementById('newServiceName').value='';
   document.getElementById('newServicePrice').value='';
@@ -2263,7 +2469,7 @@ function resetAmountOverride(){
   document.getElementById('amountOverrideNote').style.display = 'none';
   document.getElementById('discResetWrap').style.display = 'none';
   // Recalculate from services
-  const totalPrice = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+  const totalPrice = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0));
   document.getElementById('fAmount').value = totalPrice;
   const discOn = document.getElementById('discStudent').checked || document.getElementById('discResidence').checked;
   if(discOn) applyDiscount(); else calcTip();
@@ -2292,21 +2498,20 @@ function applyDiscount() {
   let totalDiscounted = 0;
 
   selectedSvcs.forEach(name => {
-    const svc = DB.services.find(s => s.name === name) || {};
-    const price = svc.defaultPrice || 0;
+    const price = priceOf(name, dateVal);
     totalOriginal += price;
 
     let discountedPrice = price;
     let discLabel = '';
 
-    if (studentOn && STUDENT_ELIGIBLE.includes(name)) {
+    if (studentOn && svcIs(name, STUDENT_ELIGIBLE)) {
       if (isMonWed) {
         discountedPrice = price * 0.90;
         discLabel = ' −10% student';
       } else {
         discLabel = ' ⚠️ Student only Mon/Wed';
       }
-    } else if (residenceOn && !RESIDENCE_EXCLUDED.includes(name) && price >= RESIDENCE_MIN_PRICE) {
+    } else if (residenceOn && !svcIs(name, RESIDENCE_EXCLUDED) && price >= RESIDENCE_MIN_PRICE) {
       discountedPrice = price * 0.80;
       discLabel = ' −20% residence';
     }
@@ -2320,7 +2525,7 @@ function applyDiscount() {
   if (!studentOn && !residenceOn) {
     resultEl.style.display = 'none';
     // Restore original total
-    const orig = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+    const orig = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0));
     document.getElementById('fAmount').value = orig;
     calcTip();
     return;
@@ -2329,7 +2534,7 @@ function applyDiscount() {
   if (lines.length === 0) {
     resultEl.style.display = '';
     resultEl.innerHTML = `<span style="color:var(--amber)">⚠️ Selected services are not eligible for this discount</span>`;
-    const orig = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0);
+    const orig = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0));
     document.getElementById('fAmount').value = orig;
     calcTip();
     return;
@@ -2350,7 +2555,7 @@ function applyDiscount() {
 // (was the Total Sale tip calculator) keeps "Price before discount" in sync with the services
 function calcTip() {
   if(!listManual){
-    document.getElementById('fListPrice').value = selectedSvcs.reduce((s,n)=>s+((DB.services.find(x=>x.name===n)||{}).defaultPrice||0),0) || '';
+    document.getElementById('fListPrice').value = round2(selectedSvcs.reduce((s,n)=>s+priceOf(n,document.getElementById('fDate').value),0)) || '';
   }
   const k=document.getElementById('fKind').value;
   if(k==='fulltip'||k==='noshow') document.getElementById('fAmount').value=0;
